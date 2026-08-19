@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyspark-contracts"
+dynamic = ["version"]
+description = "Lightweight schema and data quality validation for PySpark DataFrames"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+pyspark = ["pyspark>=3.3"]
+
+[tool.hatch.version]
+path = "pyspark_contracts/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pyspark_contracts"]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "pyspark>=3.3", "ruff>=0.4"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
