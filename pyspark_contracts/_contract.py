@@ -70,6 +70,18 @@ class Contract(metaclass=ContractMeta):
                         actual_type=type(actual[col_name]).__name__,
                     )
                 )
+            elif not field.nullable and row_count > 0:
+                from pyspark.sql import functions as F
+
+                null_count = df.filter(F.col(col_name).isNull()).count()
+                if null_count > 0:
+                    violations.append(
+                        Violation(
+                            kind="null_violation",
+                            column=col_name,
+                            row_pct=round(null_count / row_count * 100, 1),
+                        )
+                    )
 
         return violations
 

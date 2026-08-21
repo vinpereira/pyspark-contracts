@@ -118,3 +118,36 @@ def test_external_logger_is_used(spark, caplog):
         with pytest.raises(ContractViolationError):
             MyContract().validate(df, logger=external_logger)
     assert any("missing_column" in str(getattr(r, "violations", "")) for r in caplog.records)
+
+
+def test_validate_detects_null_violation(spark):
+    class MyContract(Contract):
+        vin = Field(StringType(), nullable=False)
+
+    schema = StructType([StructField("vin", StringType())])
+    df = spark.createDataFrame([(None,), ("ABC123",), ("DEF456",)], schema)
+    report = MyContract().validate(df, mode="soft")
+    assert len(report.violations) == 1
+    assert report.violations[0].kind == "null_violation"
+    assert report.violations[0].row_pct == pytest.approx(33.3, abs=0.1)
+
+
+def test_validate_nullable_false_passes_when_no_nulls(spark):
+    class MyContract(Contract):
+        vin = Field(StringType(), nullable=False)
+
+    schema = StructType([StructField("vin", StringType())])
+    df = spark.createDataFrame([("ABC",), ("DEF",)], schema)
+    report = MyContract().validate(df, mode="soft")
+    assert not report
+
+
+def test_validate_nullable_false_skipped_on_type_mismatch(spark):
+    class MyContract(Contract):
+        vin = Field(StringType(), nullable=False)
+
+    schema = StructType([StructField("vin", IntegerType())])
+    df = spark.createDataFrame([(1,), (2,)], schema)
+    report = MyContract().validate(df, mode="soft")
+    assert len(report.violations) == 1
+    assert report.violations[0].kind == "type_mismatch"
