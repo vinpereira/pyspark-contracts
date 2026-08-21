@@ -31,6 +31,9 @@ class Contract(metaclass=ContractMeta):
         _logger = logger or get_logger()
         row_count = df.count()
         violations = self._check_schema(df, row_count)
+        if row_count > 0:
+            violated_columns = {v.column for v in violations}
+            violations += self._check_quality(df, row_count, skip_columns=violated_columns)
         report = ViolationReport(type(self).__name__, violations, row_count, mode=mode)
 
         if violations:
@@ -88,4 +91,60 @@ class Contract(metaclass=ContractMeta):
     def _check_quality(
         self, df: DataFrame, row_count: int, skip_columns: set[str]
     ) -> list[Violation]:
-        return []  # implemented in Task 8
+        from pyspark.sql import functions as F
+
+        violations: list[Violation] = []
+
+        for col_name, field in self._fields.items():
+            if col_name in skip_columns or not field.has_quality_constraints():
+                continue
+
+            if field.min_value is not None:
+                fail = df.filter(F.col(col_name) < field.min_value).count()
+                if fail:
+                    violations.append(
+                        Violation(
+                            kind="value_out_of_range",
+                            column=col_name,
+                            constraint=f"min_value={field.min_value}",
+                            row_pct=round(fail / row_count * 100, 1),
+                        )
+                    )
+
+            if field.max_value is not None:
+                fail = df.filter(F.col(col_name) > field.max_value).count()
+                if fail:
+                    violations.append(
+                        Violation(
+                            kind="value_out_of_range",
+                            column=col_name,
+                            constraint=f"max_value={field.max_value}",
+                            row_pct=round(fail / row_count * 100, 1),
+                        )
+                    )
+
+            if field.min_length is not None:
+                fail = df.filter(F.length(F.col(col_name)) < field.min_length).count()
+                if fail:
+                    violations.append(
+                        Violation(
+                            kind="length_out_of_range",
+                            column=col_name,
+                            constraint=f"min_length={field.min_length}",
+                            row_pct=round(fail / row_count * 100, 1),
+                        )
+                    )
+
+            if field.max_length is not None:
+                fail = df.filter(F.length(F.col(col_name)) > field.max_length).count()
+                if fail:
+                    violations.append(
+                        Violation(
+                            kind="length_out_of_range",
+                            column=col_name,
+                            constraint=f"max_length={field.max_length}",
+                            row_pct=round(fail / row_count * 100, 1),
+                        )
+                    )
+
+        return violations
