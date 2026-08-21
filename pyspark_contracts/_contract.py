@@ -147,4 +147,28 @@ class Contract(metaclass=ContractMeta):
                         )
                     )
 
+            if field.regex is not None:
+                fail = df.filter(~F.col(col_name).rlike(field.regex)).count()
+                if fail:
+                    violations.append(
+                        Violation(
+                            kind="regex_mismatch",
+                            column=col_name,
+                            constraint=f"regex={field.regex!r}",
+                            row_pct=round(fail / row_count * 100, 1),
+                        )
+                    )
+
+            if field.allowed_values is not None:
+                fail = df.filter(~F.col(col_name).isin(field.allowed_values)).count()
+                if fail:
+                    violations.append(
+                        Violation(
+                            kind="value_not_allowed",
+                            column=col_name,
+                            constraint=f"allowed_values={field.allowed_values}",
+                            row_pct=round(fail / row_count * 100, 1),
+                        )
+                    )
+
         return violations
