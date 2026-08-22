@@ -10,6 +10,16 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = []
+authors = [{ name = "Vinicius Pereira", email = "vp.vinicius.pereira@gmail.com" }]
+keywords = ["pyspark", "data-quality", "schema-validation", "etl"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Repository = "https://github.com/vinpereira/pyspark-contracts"
 
 [project.optional-dependencies]
 pyspark = ["pyspark>=3.3"]
