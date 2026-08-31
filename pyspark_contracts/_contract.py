@@ -27,17 +27,23 @@ class Contract(metaclass=ContractMeta):
         df: DataFrame,
         *,
         mode: str = "hard",
+        lazy: bool | None = None,
         logger: logging.Logger | None = None,
     ) -> ViolationReport:
         if os.environ.get("PYSPARK_CONTRACTS_ENABLED", "true").lower() == "false":
             return ViolationReport(type(self).__name__, [], 0, mode=mode)
 
+        if lazy is None:
+            lazy = mode != "hard"
+
         _logger = logger or get_logger()
         row_count = df.count()
-        violations = self._check_schema(df, row_count)
-        if row_count > 0:
+        violations = self._check_schema(df, row_count, lazy=lazy)
+        if row_count > 0 and (lazy or not violations):
             violated_columns = {v.column for v in violations}
-            violations += self._check_quality(df, row_count, skip_columns=violated_columns)
+            violations += self._check_quality(
+                df, row_count, skip_columns=violated_columns, lazy=lazy
+            )
         report = ViolationReport(type(self).__name__, violations, row_count, mode=mode)
 
         if violations:
@@ -55,27 +61,25 @@ class Contract(metaclass=ContractMeta):
 
         return report
 
-    def _check_schema(self, df: DataFrame, row_count: int) -> list[Violation]:
+    def _check_schema(self, df: DataFrame, row_count: int, lazy: bool = True) -> list[Violation]:
         violations: list[Violation] = []
         actual: dict[str, DataType] = {f.name: f.dataType for f in df.schema.fields}
 
         for col_name, field in self._fields.items():
+            violation: Violation | None = None
+
             if col_name not in actual:
-                violations.append(
-                    Violation(
-                        kind="missing_column",
-                        column=col_name,
-                        expected_type=type(field.dtype).__name__,
-                    )
+                violation = Violation(
+                    kind="missing_column",
+                    column=col_name,
+                    expected_type=type(field.dtype).__name__,
                 )
             elif actual[col_name] != field.dtype:
-                violations.append(
-                    Violation(
-                        kind="type_mismatch",
-                        column=col_name,
-                        expected_type=type(field.dtype).__name__,
-                        actual_type=type(actual[col_name]).__name__,
-                    )
+                violation = Violation(
+                    kind="type_mismatch",
+                    column=col_name,
+                    expected_type=type(field.dtype).__name__,
+                    actual_type=type(actual[col_name]).__name__,
                 )
             elif not field.nullable and row_count > 0:
                 from pyspark.sql import functions as F
@@ -83,16 +87,19 @@ class Contract(metaclass=ContractMeta):
                 condition = F.col(col_name).isNull()
                 null_count = df.filter(condition).count()
                 if null_count > 0:
-                    violations.append(
-                        Violation(
-                            kind="null_violation",
-                            column=col_name,
-                            constraint="nullable",
-                            row_pct=round(null_count / row_count * 100, 1),
-                            failure_count=null_count,
-                            sample_values=self._sample_values(df, col_name, condition),
-                        )
+                    violation = Violation(
+                        kind="null_violation",
+                        column=col_name,
+                        constraint="nullable",
+                        row_pct=round(null_count / row_count * 100, 1),
+                        failure_count=null_count,
+                        sample_values=self._sample_values(df, col_name, condition),
                     )
+
+            if violation is not None:
+                violations.append(violation)
+                if not lazy:
+                    return violations
 
         return violations
 
@@ -101,7 +108,7 @@ class Contract(metaclass=ContractMeta):
         return [row[0] for row in rows]
 
     def _check_quality(
-        self, df: DataFrame, row_count: int, skip_columns: set[str]
+        self, df: DataFrame, row_count: int, skip_columns: set[str], lazy: bool = True
     ) -> list[Violation]:
         from pyspark.sql import functions as F
 
@@ -125,6 +132,8 @@ class Contract(metaclass=ContractMeta):
                             sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
+                    if not lazy:
+                        return violations
 
             if field.max_value is not None:
                 condition = F.col(col_name) > field.max_value
@@ -140,6 +149,8 @@ class Contract(metaclass=ContractMeta):
                             sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
+                    if not lazy:
+                        return violations
 
             if field.min_length is not None:
                 condition = F.length(F.col(col_name)) < field.min_length
@@ -155,6 +166,8 @@ class Contract(metaclass=ContractMeta):
                             sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
+                    if not lazy:
+                        return violations
 
             if field.max_length is not None:
                 condition = F.length(F.col(col_name)) > field.max_length
@@ -170,6 +183,8 @@ class Contract(metaclass=ContractMeta):
                             sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
+                    if not lazy:
+                        return violations
 
             if field.regex is not None:
                 condition = ~F.col(col_name).rlike(field.regex)
@@ -185,6 +200,8 @@ class Contract(metaclass=ContractMeta):
                             sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
+                    if not lazy:
+                        return violations
 
             if field.allowed_values is not None:
                 condition = ~F.col(col_name).isin(field.allowed_values)
@@ -200,5 +217,7 @@ class Contract(metaclass=ContractMeta):
                             sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
+                    if not lazy:
+                        return violations
 
         return violations
