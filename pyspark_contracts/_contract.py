@@ -1,4 +1,5 @@
 import logging
+import os
 
 from pyspark.sql import DataFrame
 from pyspark.sql.types import DataType
@@ -28,6 +29,9 @@ class Contract(metaclass=ContractMeta):
         mode: str = "hard",
         logger: logging.Logger | None = None,
     ) -> ViolationReport:
+        if os.environ.get("PYSPARK_CONTRACTS_ENABLED", "true").lower() == "false":
+            return ViolationReport(type(self).__name__, [], 0, mode=mode)
+
         _logger = logger or get_logger()
         row_count = df.count()
         violations = self._check_schema(df, row_count)
