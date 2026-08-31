@@ -42,6 +42,29 @@ if report:
 | `"hard"` (default) | Logs `ERROR` (JSON), raises `ContractViolationError` | — |
 | `"soft"` | Logs `WARNING` (JSON), continues | `ViolationReport` |
 
+## Lazy vs fail-fast
+
+By default, `"hard"` mode stops at the first violation found (fewer Spark actions,
+faster feedback), while `"soft"` mode collects every violation so you get the full
+picture in one run. Override either with `lazy`:
+
+```python
+# Hard mode, but collect every violation before raising
+OdometerContract().validate(df, lazy=True)
+
+# Soft mode, but stop at the first violation
+report = OdometerContract().validate(df, mode="soft", lazy=False)
+```
+
+## Disabling validation
+
+```bash
+PYSPARK_CONTRACTS_ENABLED=false  # skips all validation, no code changes needed
+```
+
+Useful when performance is critical and the schema is already trusted — e.g. the
+read right after a validated write.
+
 ## Bringing your own logger
 
 ```python
@@ -76,7 +99,14 @@ Both modes emit the same structured JSON before acting:
   "mode": "hard",
   "violations": [
     {"kind": "missing_column", "column": "odometerStart", "expected_type": "FloatType"},
-    {"kind": "value_out_of_range", "column": "odometerEnd", "constraint": "min_value=0", "row_pct": 2.3}
+    {
+      "kind": "value_out_of_range",
+      "column": "odometerEnd",
+      "constraint": "min_value=0",
+      "row_pct": 2.3,
+      "failure_count": 42,
+      "sample_values": [-1.0, -5.5, -12.0]
+    }
   ],
   "row_count": 1842
 }

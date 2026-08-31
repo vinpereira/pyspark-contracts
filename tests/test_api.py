@@ -11,4 +11,4 @@ def test_version_is_defined():
     import pyspark_contracts
 
     assert hasattr(pyspark_contracts, "__version__")
-    assert pyspark_contracts.__version__ == "0.1.0"
+    assert pyspark_contracts.__version__ == "0.2.0"
