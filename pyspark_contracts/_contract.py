@@ -80,17 +80,25 @@ class Contract(metaclass=ContractMeta):
             elif not field.nullable and row_count > 0:
                 from pyspark.sql import functions as F
 
-                null_count = df.filter(F.col(col_name).isNull()).count()
+                condition = F.col(col_name).isNull()
+                null_count = df.filter(condition).count()
                 if null_count > 0:
                     violations.append(
                         Violation(
                             kind="null_violation",
                             column=col_name,
+                            constraint="nullable",
                             row_pct=round(null_count / row_count * 100, 1),
+                            failure_count=null_count,
+                            sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
 
         return violations
+
+    def _sample_values(self, df: DataFrame, col_name: str, condition) -> list:
+        rows = df.filter(condition).select(col_name).limit(5).collect()
+        return [row[0] for row in rows]
 
     def _check_quality(
         self, df: DataFrame, row_count: int, skip_columns: set[str]
@@ -104,7 +112,8 @@ class Contract(metaclass=ContractMeta):
                 continue
 
             if field.min_value is not None:
-                fail = df.filter(F.col(col_name) < field.min_value).count()
+                condition = F.col(col_name) < field.min_value
+                fail = df.filter(condition).count()
                 if fail:
                     violations.append(
                         Violation(
@@ -112,11 +121,14 @@ class Contract(metaclass=ContractMeta):
                             column=col_name,
                             constraint=f"min_value={field.min_value}",
                             row_pct=round(fail / row_count * 100, 1),
+                            failure_count=fail,
+                            sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
 
             if field.max_value is not None:
-                fail = df.filter(F.col(col_name) > field.max_value).count()
+                condition = F.col(col_name) > field.max_value
+                fail = df.filter(condition).count()
                 if fail:
                     violations.append(
                         Violation(
@@ -124,11 +136,14 @@ class Contract(metaclass=ContractMeta):
                             column=col_name,
                             constraint=f"max_value={field.max_value}",
                             row_pct=round(fail / row_count * 100, 1),
+                            failure_count=fail,
+                            sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
 
             if field.min_length is not None:
-                fail = df.filter(F.length(F.col(col_name)) < field.min_length).count()
+                condition = F.length(F.col(col_name)) < field.min_length
+                fail = df.filter(condition).count()
                 if fail:
                     violations.append(
                         Violation(
@@ -136,11 +151,14 @@ class Contract(metaclass=ContractMeta):
                             column=col_name,
                             constraint=f"min_length={field.min_length}",
                             row_pct=round(fail / row_count * 100, 1),
+                            failure_count=fail,
+                            sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
 
             if field.max_length is not None:
-                fail = df.filter(F.length(F.col(col_name)) > field.max_length).count()
+                condition = F.length(F.col(col_name)) > field.max_length
+                fail = df.filter(condition).count()
                 if fail:
                     violations.append(
                         Violation(
@@ -148,11 +166,14 @@ class Contract(metaclass=ContractMeta):
                             column=col_name,
                             constraint=f"max_length={field.max_length}",
                             row_pct=round(fail / row_count * 100, 1),
+                            failure_count=fail,
+                            sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
 
             if field.regex is not None:
-                fail = df.filter(~F.col(col_name).rlike(field.regex)).count()
+                condition = ~F.col(col_name).rlike(field.regex)
+                fail = df.filter(condition).count()
                 if fail:
                     violations.append(
                         Violation(
@@ -160,11 +181,14 @@ class Contract(metaclass=ContractMeta):
                             column=col_name,
                             constraint=f"regex={field.regex!r}",
                             row_pct=round(fail / row_count * 100, 1),
+                            failure_count=fail,
+                            sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
 
             if field.allowed_values is not None:
-                fail = df.filter(~F.col(col_name).isin(field.allowed_values)).count()
+                condition = ~F.col(col_name).isin(field.allowed_values)
+                fail = df.filter(condition).count()
                 if fail:
                     violations.append(
                         Violation(
@@ -172,6 +196,8 @@ class Contract(metaclass=ContractMeta):
                             column=col_name,
                             constraint=f"allowed_values={field.allowed_values}",
                             row_pct=round(fail / row_count * 100, 1),
+                            failure_count=fail,
+                            sample_values=self._sample_values(df, col_name, condition),
                         )
                     )
 

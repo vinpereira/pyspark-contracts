@@ -10,6 +10,8 @@ class Violation:
     actual_type: str | None = None
     constraint: str | None = None
     row_pct: float | None = None
+    failure_count: int | None = None
+    sample_values: list | None = None
 
 
 class ViolationReport:

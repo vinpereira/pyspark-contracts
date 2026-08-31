@@ -130,6 +130,7 @@ def test_validate_detects_null_violation(spark):
     assert len(report.violations) == 1
     assert report.violations[0].kind == "null_violation"
     assert report.violations[0].row_pct == pytest.approx(33.3, abs=0.1)
+    assert report.violations[0].failure_count == 1
 
 
 def test_validate_nullable_false_passes_when_no_nulls(spark):

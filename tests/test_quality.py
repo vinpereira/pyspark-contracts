@@ -16,6 +16,19 @@ def test_min_value_violation(spark):
     assert report.violations[0].kind == "value_out_of_range"
     assert "min_value" in report.violations[0].constraint
     assert report.violations[0].row_pct == pytest.approx(66.7, abs=0.1)
+    assert report.violations[0].failure_count == 2
+    assert sorted(report.violations[0].sample_values) == [-5.0, -1.0]
+
+
+def test_sample_values_capped_at_five(spark):
+    class MyContract(Contract):
+        odometer = Field(FloatType(), min_value=0.0)
+
+    schema = StructType([StructField("odometer", FloatType())])
+    df = spark.createDataFrame([(-float(i),) for i in range(1, 8)], schema)
+    report = MyContract().validate(df, mode="soft")
+    assert report.violations[0].failure_count == 7
+    assert len(report.violations[0].sample_values) == 5
 
 
 def test_max_value_violation(spark):
