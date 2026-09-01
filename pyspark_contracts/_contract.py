@@ -31,7 +31,7 @@ class Contract(metaclass=ContractMeta):
         logger: logging.Logger | None = None,
     ) -> ViolationReport:
         if os.environ.get("PYSPARK_CONTRACTS_ENABLED", "true").lower() == "false":
-            return ViolationReport(type(self).__name__, [], 0, mode=mode)
+            return ViolationReport(type(self).__name__, [], None, mode=mode)
 
         if lazy is None:
             lazy = mode != "hard"

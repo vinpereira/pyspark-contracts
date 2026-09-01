@@ -19,7 +19,7 @@ class ViolationReport:
         self,
         contract_name: str,
         violations: list[Violation],
-        row_count: int,
+        row_count: int | None,
         mode: str = "hard",
     ) -> None:
         self.contract_name = contract_name

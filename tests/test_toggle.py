@@ -13,6 +13,7 @@ def test_validate_skipped_when_globally_disabled(spark, monkeypatch):
     df = spark.createDataFrame([], StructType([]))
     report = MyContract().validate(df, mode="hard")
     assert not report
+    assert report.row_count is None
 
 
 def test_validate_runs_when_globally_enabled(spark, monkeypatch):
