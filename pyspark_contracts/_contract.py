@@ -47,12 +47,17 @@ class Contract(metaclass=ContractMeta):
         _logger = logger or get_logger()
         row_count = df.count()
         violations = self._check_schema(df, row_count, lazy=lazy)
+        blocks_cross_column = any(v.kind in ("missing_column", "type_mismatch") for v in violations)
         if row_count > 0 and (lazy or not violations):
             violated_columns = {v.column for v in violations}
             violations += self._check_quality(
-                df, row_count, skip_columns=violated_columns, lazy=lazy
+                df,
+                row_count,
+                skip_columns=violated_columns,
+                lazy=lazy,
+                blocks_cross_column=blocks_cross_column,
             )
-        if row_count > 0 and (lazy or not violations):
+        if row_count > 0 and not blocks_cross_column and (lazy or not violations):
             violations += self._check_custom(df, row_count, lazy=lazy, **kwargs)
         report = ViolationReport(type(self).__name__, violations, row_count, mode=mode)
 
@@ -118,7 +123,12 @@ class Contract(metaclass=ContractMeta):
         return [row[0] for row in rows]
 
     def _check_quality(
-        self, df: DataFrame, row_count: int, skip_columns: set[str], lazy: bool = True
+        self,
+        df: DataFrame,
+        row_count: int,
+        skip_columns: set[str],
+        lazy: bool = True,
+        blocks_cross_column: bool = False,
     ) -> list[Violation]:
         from pyspark.sql import functions as F
 
@@ -230,7 +240,7 @@ class Contract(metaclass=ContractMeta):
                     if not lazy:
                         return violations
 
-            if field.condition is not None:
+            if field.condition is not None and not blocks_cross_column:
                 condition = ~field.condition(col_name)
                 fail = df.filter(condition).count()
                 if fail:

@@ -168,6 +168,22 @@ def test_no_condition_violation_when_condition_holds(spark):
     assert not report
 
 
+def test_condition_skipped_when_missing_column(spark):
+    class MyContract(Contract):
+        start_dt = Field(StringType(), condition=lambda f: F.col(f) < F.col("end_dt"))
+        end_dt = Field(StringType())
+        vin = Field(StringType())
+
+    schema = StructType(
+        [StructField("start_dt", StringType()), StructField("end_dt", StringType())]
+    )
+    df = spark.createDataFrame([("b", "a")], schema)
+    report = MyContract().validate(df, mode="soft", lazy=True)
+    kinds = [v.kind for v in report.violations]
+    assert "missing_column" in kinds
+    assert "condition_failed" not in kinds
+
+
 def test_quality_skipped_for_columns_with_schema_violations(spark):
     class MyContract(Contract):
         odometer = Field(FloatType(), min_value=0.0)

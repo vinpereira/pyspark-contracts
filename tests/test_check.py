@@ -1,5 +1,5 @@
 import pytest
-from pyspark.sql.types import FloatType, StructField, StructType
+from pyspark.sql.types import FloatType, StringType, StructField, StructType
 
 from pyspark_contracts._check import check
 from pyspark_contracts._contract import Contract
@@ -129,3 +129,36 @@ def test_check_lazy_false_stops_at_first_failing_check(spark):
     report = MyContract().validate(df, mode="soft", lazy=False)
     assert len(report.violations) == 1
     assert report.violations[0].column == "check_a"
+
+
+def test_check_skipped_when_missing_column(spark):
+    class MyContract(Contract):
+        vin = Field(StringType())
+        odometer = Field(FloatType())
+
+        @check("always fails")
+        def always_fails(self, df):
+            return df
+
+    schema = StructType([StructField("vin", StringType())])
+    df = spark.createDataFrame([("ABC",)], schema)
+    report = MyContract().validate(df, mode="soft", lazy=True)
+    kinds = [v.kind for v in report.violations]
+    assert "missing_column" in kinds
+    assert "check_failed" not in kinds
+
+
+def test_check_still_runs_when_only_quality_violation_present(spark):
+    class MyContract(Contract):
+        odometer = Field(FloatType(), min_value=0.0)
+
+        @check("always fails")
+        def always_fails(self, df):
+            return df
+
+    schema = StructType([StructField("odometer", FloatType())])
+    df = spark.createDataFrame([(-1.0,)], schema)
+    report = MyContract().validate(df, mode="soft", lazy=True)
+    kinds = [v.kind for v in report.violations]
+    assert "value_out_of_range" in kinds
+    assert "check_failed" in kinds
