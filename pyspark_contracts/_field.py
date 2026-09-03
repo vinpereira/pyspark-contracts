@@ -1,3 +1,6 @@
+from collections.abc import Callable
+
+from pyspark.sql import Column
 from pyspark.sql.types import DataType
 
 
@@ -13,6 +16,8 @@ class Field:
         max_length: int | None = None,
         regex: str | None = None,
         allowed_values: list | None = None,
+        condition: Callable[[str], Column] | None = None,
+        condition_description: str | None = None,
     ) -> None:
         self.dtype = dtype
         self.nullable = nullable
@@ -22,6 +27,8 @@ class Field:
         self.max_length = max_length
         self.regex = regex
         self.allowed_values = allowed_values
+        self.condition = condition
+        self.condition_description = condition_description
 
     def has_quality_constraints(self) -> bool:
         return any(
@@ -32,5 +39,6 @@ class Field:
                 self.max_length is not None,
                 self.regex is not None,
                 self.allowed_values is not None,
+                self.condition is not None,
             ]
         )

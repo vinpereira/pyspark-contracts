@@ -1,3 +1,4 @@
+from pyspark.sql import functions as F
 from pyspark.sql.types import FloatType, StringType
 
 from pyspark_contracts._field import Field
@@ -39,3 +40,21 @@ def test_field_allowed_values_sets_quality_constraint():
     f = Field(StringType(), allowed_values=["active", "inactive"])
     assert f.has_quality_constraints()
     assert f.allowed_values == ["active", "inactive"]
+
+
+def test_field_condition_sets_quality_constraint():
+    f = Field(FloatType(), condition=lambda c: F.col(c) > 0)
+    assert f.has_quality_constraints()
+    assert f.condition is not None
+
+
+def test_field_condition_description_defaults_to_none():
+    f = Field(FloatType())
+    assert f.condition_description is None
+
+
+def test_field_condition_description_can_be_set():
+    f = Field(
+        FloatType(), condition=lambda c: F.col(c) > 0, condition_description="must be positive"
+    )
+    assert f.condition_description == "must be positive"
