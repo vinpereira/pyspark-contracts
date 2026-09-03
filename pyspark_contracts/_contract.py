@@ -1,5 +1,6 @@
 import logging
 import os
+from collections.abc import Callable
 
 from pyspark.sql import DataFrame
 from pyspark.sql.types import DataType
@@ -12,15 +13,20 @@ from pyspark_contracts._report import ContractViolationError, Violation, Violati
 class ContractMeta(type):
     def __new__(mcs, name, bases, namespace):
         fields: dict[str, Field] = {}
+        checks: dict[str, Callable] = {}
         for attr_name, value in namespace.items():
             if isinstance(value, Field):
                 fields[attr_name] = value
+            elif callable(value) and hasattr(value, "_check_description"):
+                checks[attr_name] = value
         namespace["_fields"] = fields
+        namespace["_checks"] = checks
         return super().__new__(mcs, name, bases, namespace)
 
 
 class Contract(metaclass=ContractMeta):
     _fields: dict[str, Field]
+    _checks: dict[str, Callable]
 
     def validate(
         self,
