@@ -226,4 +226,21 @@ class Contract(metaclass=ContractMeta):
                     if not lazy:
                         return violations
 
+            if field.condition is not None:
+                condition = ~field.condition(col_name)
+                fail = df.filter(condition).count()
+                if fail:
+                    violations.append(
+                        Violation(
+                            kind="condition_failed",
+                            column=col_name,
+                            constraint=field.condition_description or "condition",
+                            row_pct=round(fail / row_count * 100, 1),
+                            failure_count=fail,
+                            sample_values=self._sample_values(df, col_name, condition),
+                        )
+                    )
+                    if not lazy:
+                        return violations
+
         return violations

@@ -1,4 +1,5 @@
 import pytest
+from pyspark.sql import functions as F
 from pyspark.sql.types import FloatType, IntegerType, StringType, StructField, StructType
 
 from pyspark_contracts._contract import Contract
@@ -116,6 +117,53 @@ def test_no_allowed_values_violation_when_all_valid(spark):
 
     schema = StructType([StructField("status", StringType())])
     df = spark.createDataFrame([("active",), ("inactive",)], schema)
+    report = MyContract().validate(df, mode="soft")
+    assert not report
+
+
+def test_condition_violation(spark):
+    class MyContract(Contract):
+        start_dt = Field(
+            StringType(),
+            condition=lambda f: F.col(f) < F.col("end_dt"),
+            condition_description="start_dt must precede end_dt",
+        )
+        end_dt = Field(StringType())
+
+    schema = StructType(
+        [StructField("start_dt", StringType()), StructField("end_dt", StringType())]
+    )
+    df = spark.createDataFrame([("b", "a"), ("a", "b")], schema)
+    report = MyContract().validate(df, mode="soft")
+    assert len(report.violations) == 1
+    assert report.violations[0].kind == "condition_failed"
+    assert report.violations[0].column == "start_dt"
+    assert report.violations[0].constraint == "start_dt must precede end_dt"
+    assert report.violations[0].failure_count == 1
+
+
+def test_condition_violation_defaults_constraint_to_condition(spark):
+    class MyContract(Contract):
+        start_dt = Field(StringType(), condition=lambda f: F.col(f) < F.col("end_dt"))
+        end_dt = Field(StringType())
+
+    schema = StructType(
+        [StructField("start_dt", StringType()), StructField("end_dt", StringType())]
+    )
+    df = spark.createDataFrame([("b", "a")], schema)
+    report = MyContract().validate(df, mode="soft")
+    assert report.violations[0].constraint == "condition"
+
+
+def test_no_condition_violation_when_condition_holds(spark):
+    class MyContract(Contract):
+        start_dt = Field(StringType(), condition=lambda f: F.col(f) < F.col("end_dt"))
+        end_dt = Field(StringType())
+
+    schema = StructType(
+        [StructField("start_dt", StringType()), StructField("end_dt", StringType())]
+    )
+    df = spark.createDataFrame([("a", "b"), ("a", "c")], schema)
     report = MyContract().validate(df, mode="soft")
     assert not report
 
