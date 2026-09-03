@@ -1,8 +1,9 @@
 def test_public_imports():
-    from pyspark_contracts import Contract, ContractViolationError, Field, ViolationReport
+    from pyspark_contracts import Contract, ContractViolationError, Field, ViolationReport, check
 
     assert Contract is not None
     assert Field is not None
+    assert check is not None
     assert ContractViolationError is not None
     assert ViolationReport is not None
 
@@ -11,4 +12,4 @@ def test_version_is_defined():
     import pyspark_contracts
 
     assert hasattr(pyspark_contracts, "__version__")
-    assert pyspark_contracts.__version__ == "0.2.1"
+    assert pyspark_contracts.__version__ == "0.3.0"

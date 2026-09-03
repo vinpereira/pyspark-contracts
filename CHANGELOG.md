@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.0] - 2026-09-03
+
+### Added
+- `@check` method decorator for arbitrary cross-column validation logic. The method
+  receives the full DataFrame and returns the failing rows; extra parameters are supplied
+  via `validate(df, **kwargs)` and routed to the checks that declare them.
+- `condition` / `condition_description` on `Field` for simple two-column comparisons
+  anchored to one field (e.g. `start_dt` must precede `end_dt`).
+- Two new violation kinds: `check_failed` and `condition_failed`.
+
+### Changed
+- `@check` and `condition` are skipped entirely when the DataFrame has a `missing_column`
+  or `type_mismatch` violation, since both can reference arbitrary columns and would
+  otherwise risk crashing on a column that doesn't exist.
+
 ## [0.2.1] - 2026-09-01
 
 ### Fixed

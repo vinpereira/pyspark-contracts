@@ -56,6 +56,45 @@ OdometerContract().validate(df, lazy=True)
 report = OdometerContract().validate(df, mode="soft", lazy=False)
 ```
 
+## Cross-column checks
+
+`Field` constraints are column-local. For rules spanning more than one column, use
+`condition` (simple two-column comparisons) or `@check` (arbitrary logic):
+
+```python
+from pyspark_contracts import Contract, Field, check
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.types import DoubleType, TimestampType
+
+class FinalDfContract(Contract):
+    end_dt   = Field(TimestampType(), nullable=False)
+    start_dt = Field(TimestampType(), nullable=False,
+                     condition=lambda f: F.col(f) < F.col("end_dt"),
+                     condition_description="start_dt must precede end_dt")
+
+    delta_km = Field(DoubleType(), nullable=False)
+
+    @check("delta_km must be non-negative (no regression)")
+    def no_regression(self, df: DataFrame) -> DataFrame:
+        return df.filter(F.col("delta_km") < 0)
+
+    @check("delta_km must not exceed daily threshold")
+    def no_abnormal_jump(self, df: DataFrame, threshold: float = 1000.0) -> DataFrame:
+        return df.filter(F.col("delta_km") > threshold)
+```
+
+A `@check` method receives the full DataFrame and returns the **failing rows** — an empty
+result means it passed. Extra parameters (`threshold`) are supplied via `validate()` and
+routed to the checks that declare them:
+
+```python
+report = FinalDfContract().validate(df, mode="soft", threshold=2000.0)
+```
+
+Both `condition` and `@check` are skipped entirely when the DataFrame has a missing column
+or type mismatch, since either can reference arbitrary columns.
+
 ## Disabling validation
 
 ```bash
@@ -136,6 +175,8 @@ filter ispresent(violations)
 | `length_out_of_range` | String length below `min_length` or above `max_length` |
 | `regex_mismatch` | Value does not match `regex` pattern |
 | `value_not_allowed` | Value not in `allowed_values` list |
+| `condition_failed` | `Field(condition=...)` expression evaluated to false |
+| `check_failed` | `@check`-decorated method returned non-empty failing rows |
 
 ## Performance note
 
