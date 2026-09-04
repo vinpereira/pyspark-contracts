@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.4.0] - 2026-09-04
+
+### Added
+- `@check_output` decorator — validates a function's return value against a `Contract`
+  after the function runs, then returns the value unchanged.
+- `@check_input` decorator — validates a named parameter against a `Contract` before the
+  function runs, using signature binding so the parameter is found whether the caller
+  passed it positionally or by keyword. Stack multiple `@check_input` calls to validate
+  more than one parameter.
+- Both decorators fail fast with `TypeError` at decoration time — `check_input` if the
+  named parameter doesn't exist on the function, either decorator if `contract_cls` isn't
+  a `Contract` subclass — instead of failing on first call.
+
 ## [0.3.0] - 2026-09-03
 
 ### Added

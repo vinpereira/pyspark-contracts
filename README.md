@@ -95,6 +95,39 @@ report = FinalDfContract().validate(df, mode="soft", threshold=2000.0)
 Both `condition` and `@check` are skipped entirely when the DataFrame has a missing column
 or type mismatch, since either can reference arbitrary columns.
 
+## Validating pipeline functions
+
+`@check_input` and `@check_output` move contract validation from the function body onto its
+signature, so a refactor can't accidentally drop it:
+
+```python
+from pyspark_contracts import check_input, check_output
+
+@check_input(AccumulatedDataContract, param="accumulated_df")
+@check_output(FinalDfContract)
+def build_final_df(accumulated_df: DataFrame, contracts_df: DataFrame) -> DataFrame:
+    return accumulated_df.join(contracts_df, ...)
+```
+
+`check_input` validates the named parameter *before* the function runs — a bad step never
+executes. `check_output` validates the return value *after* the function runs, before it's
+returned to the caller. Both accept `mode` and any extra kwargs, forwarded to `validate()`
+exactly as if you'd called it directly:
+
+```python
+@check_output(FinalDfContract, mode="soft", threshold=2000.0)
+def build_final_df(df: DataFrame) -> DataFrame:
+    ...
+```
+
+A function needing more than one input validated stacks `@check_input`:
+
+```python
+@check_input(AccumulatedDataContract, param="accumulated_df")
+@check_input(ContractsContract, param="contracts_df")
+def build_final_df(accumulated_df, contracts_df): ...
+```
+
 ## Disabling validation
 
 ```bash
