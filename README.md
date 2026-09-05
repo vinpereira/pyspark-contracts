@@ -128,6 +128,29 @@ A function needing more than one input validated stacks `@check_input`:
 def build_final_df(accumulated_df, contracts_df): ...
 ```
 
+## Validation depth
+
+```python
+from pyspark_contracts import ValidationDepth
+
+# Column names and types only — reads df.schema, triggers zero Spark actions
+OdometerContract().validate(df, depth=ValidationDepth.SCHEMA_ONLY)
+
+# Skip structural checks, run only nullable/range/length/regex/condition/@check
+OdometerContract().validate(df, depth=ValidationDepth.DATA_ONLY)
+
+# Default: both
+OdometerContract().validate(df, depth=ValidationDepth.SCHEMA_AND_DATA)
+```
+
+`SCHEMA_AND_DATA` is the default and runs the full pipeline described everywhere else in this
+README — every schema and quality check, exactly as if `depth` were never passed.
+
+`SCHEMA_ONLY` is particularly useful in unit tests where the DataFrame is built from a known
+factory: the schema is guaranteed by construction, so only the data constraints are worth
+checking — the reverse case, `DATA_ONLY`, skips column/type checks and assumes the schema is
+already right, without adding a safety net if it isn't.
+
 ## Disabling validation
 
 ```bash
@@ -169,6 +192,7 @@ Both modes emit the same structured JSON before acting:
   "message": "contract violation — job aborted",
   "contract": "OdometerContract",
   "mode": "hard",
+  "depth": "schema_and_data",
   "violations": [
     {"kind": "missing_column", "column": "odometerStart", "expected_type": "FloatType"},
     {

@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.0] - 2026-09-05
+
+### Added
+- `ValidationDepth` enum and a `depth` parameter on `validate()`: `SCHEMA_ONLY` (column names
+  and types only, zero Spark actions), `DATA_ONLY` (skip structural checks, run only data
+  constraints), and `SCHEMA_AND_DATA` (default — today's behavior).
+- `depth` is now included in `ViolationReport.to_dict()` and the structured log output,
+  alongside `mode`.
+
+### Changed
+- The nullable check moved from the schema stage to the quality stage internally (no
+  observable behavior change for the default `SCHEMA_AND_DATA` depth) — this is what lets
+  `SCHEMA_ONLY` trigger zero Spark actions and `DATA_ONLY` still catch null violations.
+
 ## [0.4.0] - 2026-09-04
 
 ### Added

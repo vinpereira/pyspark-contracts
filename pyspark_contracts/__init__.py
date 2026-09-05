@@ -1,8 +1,9 @@
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 from pyspark_contracts._check import check
 from pyspark_contracts._contract import Contract
 from pyspark_contracts._decorators import check_input, check_output
+from pyspark_contracts._depth import ValidationDepth
 from pyspark_contracts._field import Field
 from pyspark_contracts._report import ContractViolationError, ViolationReport
 
@@ -12,6 +13,7 @@ __all__ = [
     "check",
     "check_input",
     "check_output",
+    "ValidationDepth",
     "ContractViolationError",
     "ViolationReport",
     "__version__",
