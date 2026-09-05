@@ -33,6 +33,7 @@ class Field:
     def has_quality_constraints(self) -> bool:
         return any(
             [
+                not self.nullable,
                 self.min_value is not None,
                 self.max_value is not None,
                 self.min_length is not None,

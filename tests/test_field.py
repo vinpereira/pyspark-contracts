@@ -58,3 +58,8 @@ def test_field_condition_description_can_be_set():
         FloatType(), condition=lambda c: F.col(c) > 0, condition_description="must be positive"
     )
     assert f.condition_description == "must be positive"
+
+
+def test_field_nullable_false_sets_quality_constraint():
+    f = Field(FloatType(), nullable=False)
+    assert f.has_quality_constraints()

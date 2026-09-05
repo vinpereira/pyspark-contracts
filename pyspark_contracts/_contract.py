@@ -46,7 +46,7 @@ class Contract(metaclass=ContractMeta):
 
         _logger = logger or get_logger()
         row_count = df.count()
-        violations = self._check_schema(df, row_count, lazy=lazy)
+        violations = self._check_schema(df, lazy=lazy)
         blocks_cross_column = any(v.kind in ("missing_column", "type_mismatch") for v in violations)
         if row_count > 0 and (lazy or not violations):
             violated_columns = {v.column for v in violations}
@@ -76,7 +76,7 @@ class Contract(metaclass=ContractMeta):
 
         return report
 
-    def _check_schema(self, df: DataFrame, row_count: int, lazy: bool = True) -> list[Violation]:
+    def _check_schema(self, df: DataFrame, lazy: bool = True) -> list[Violation]:
         violations: list[Violation] = []
         actual: dict[str, DataType] = {f.name: f.dataType for f in df.schema.fields}
 
@@ -96,20 +96,6 @@ class Contract(metaclass=ContractMeta):
                     expected_type=type(field.dtype).__name__,
                     actual_type=type(actual[col_name]).__name__,
                 )
-            elif not field.nullable and row_count > 0:
-                from pyspark.sql import functions as F
-
-                condition = F.col(col_name).isNull()
-                null_count = df.filter(condition).count()
-                if null_count > 0:
-                    violation = Violation(
-                        kind="null_violation",
-                        column=col_name,
-                        constraint="nullable",
-                        row_pct=round(null_count / row_count * 100, 1),
-                        failure_count=null_count,
-                        sample_values=self._sample_values(df, col_name, condition),
-                    )
 
             if violation is not None:
                 violations.append(violation)
@@ -137,6 +123,23 @@ class Contract(metaclass=ContractMeta):
         for col_name, field in self._fields.items():
             if col_name in skip_columns or not field.has_quality_constraints():
                 continue
+
+            if not field.nullable:
+                condition = F.col(col_name).isNull()
+                fail = df.filter(condition).count()
+                if fail:
+                    violations.append(
+                        Violation(
+                            kind="null_violation",
+                            column=col_name,
+                            constraint="nullable",
+                            row_pct=round(fail / row_count * 100, 1),
+                            failure_count=fail,
+                            sample_values=self._sample_values(df, col_name, condition),
+                        )
+                    )
+                    if not lazy:
+                        return violations
 
             if field.min_value is not None:
                 condition = F.col(col_name) < field.min_value
