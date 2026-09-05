@@ -1,3 +1,4 @@
+from pyspark_contracts._depth import ValidationDepth
 from pyspark_contracts._report import ContractViolationError, Violation, ViolationReport
 
 
@@ -41,6 +42,17 @@ def test_violation_report_to_dict_omits_none_fields():
     d = report.to_dict()
     violation = d["violations"][0]
     assert "actual_type" not in violation or violation.get("actual_type") is None
+
+
+def test_violation_report_depth_defaults_to_schema_and_data():
+    report = ViolationReport("MyContract", [], 100)
+    assert report.depth == ValidationDepth.SCHEMA_AND_DATA
+
+
+def test_violation_report_to_dict_includes_depth():
+    report = ViolationReport("MyContract", [], 100, depth=ValidationDepth.SCHEMA_ONLY)
+    d = report.to_dict()
+    assert d["depth"] == "schema_only"
 
 
 def test_contract_violation_error_has_report():

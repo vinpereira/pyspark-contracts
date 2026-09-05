@@ -1,6 +1,8 @@
 import dataclasses
 from dataclasses import dataclass
 
+from pyspark_contracts._depth import ValidationDepth
+
 
 @dataclass
 class Violation:
@@ -21,11 +23,13 @@ class ViolationReport:
         violations: list[Violation],
         row_count: int | None,
         mode: str = "hard",
+        depth: ValidationDepth = ValidationDepth.SCHEMA_AND_DATA,
     ) -> None:
         self.contract_name = contract_name
         self.violations = violations
         self.row_count = row_count
         self.mode = mode
+        self.depth = depth
 
     def __bool__(self) -> bool:
         return len(self.violations) > 0
@@ -37,6 +41,7 @@ class ViolationReport:
         return {
             "contract": self.contract_name,
             "mode": self.mode,
+            "depth": self.depth.value,
             "violations": [
                 {k: v for k, v in dataclasses.asdict(violation).items() if v is not None}
                 for violation in self.violations
