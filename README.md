@@ -182,6 +182,33 @@ If no logger is passed, the library emits JSON to stdout.
 | `regex` | `str` | Regex pattern (must match entire value via `rlike`). |
 | `allowed_values` | `list` | Allowlist of valid values. |
 
+## Documenting a contract
+
+`description` and `metadata` on `Field` are pure documentation — they never affect validation:
+
+```python
+class AssetHdrTelemetryReadingContract(Contract):
+    asset_hdr_id = Field(LongType(), nullable=False,
+                         description="AF internal vehicle identifier")
+    meter_reading_value = Field(DecimalType(26, 12), nullable=False, min_value=0,
+                                description="Odometer reading in km",
+                                metadata={"unit": "km", "source": "asset_hdr_telemetry_reading"})
+```
+
+Export the whole contract as data — types, constraints, descriptions, and the name/description
+of every `@check` (never the executable code, which can't be serialized):
+
+```python
+schema_dict = AssetHdrTelemetryReadingContract.to_dict()
+json_str = AssetHdrTelemetryReadingContract.to_json()
+```
+
+Or print a quick human-readable summary:
+
+```python
+print(AssetHdrTelemetryReadingContract.describe())
+```
+
 ## Log output
 
 Both modes emit the same structured JSON before acting:

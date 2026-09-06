@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.6.0] - 2026-09-06
+
+### Added
+- `description` and `metadata` on `Field` — pure documentation, never affect validation.
+- `Contract.to_dict()` / `Contract.to_json()` — export the full contract (types, nullability,
+  every quality constraint, descriptions/metadata, and `@check` names/descriptions) as plain
+  data. `condition` and `@check` logic itself is never serialized, only its description text.
+- `Contract.describe()` — a human-readable, printable summary of a contract's fields and
+  checks.
+
 ## [0.5.0] - 2026-09-05
 
 ### Added
