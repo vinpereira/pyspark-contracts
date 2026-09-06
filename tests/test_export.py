@@ -5,6 +5,7 @@ from pyspark.sql.types import DecimalType, LongType, StringType
 
 from pyspark_contracts._check import check
 from pyspark_contracts._contract import Contract
+from pyspark_contracts._dtype_json import dtype_from_json
 from pyspark_contracts._field import Field
 
 
@@ -96,3 +97,14 @@ def test_to_json_returns_valid_json_matching_to_dict():
 
     json_str = MyContract.to_json()
     assert json.loads(json_str) == MyContract.to_dict()
+
+
+def test_to_dict_field_includes_type_json_that_round_trips():
+    class MyContract(Contract):
+        meter_reading_value = Field(DecimalType(26, 12), nullable=False)
+
+    d = MyContract.to_dict()
+    field = d["fields"]["meter_reading_value"]
+    assert "type_json" in field
+    reconstructed = dtype_from_json(field["type_json"])
+    assert reconstructed == DecimalType(26, 12)

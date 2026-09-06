@@ -1,5 +1,7 @@
 import json
 
+from pyspark_contracts._dtype_json import dtype_to_json
+
 
 class _DocumentationMixin:
     @classmethod
@@ -8,6 +10,7 @@ class _DocumentationMixin:
         for name, field in cls._fields.items():
             entry: dict = {
                 "type": field.dtype.simpleString(),
+                "type_json": dtype_to_json(field.dtype),
                 "nullable": field.nullable,
             }
             if field.min_value is not None:
