@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.1] - 2026-09-06
+
+### Fixed
+- `Contract` subclasses now inherit fields and `@check` methods from their base `Contract`
+  class. Previously, `ContractMeta` only scanned the class being defined, so
+  `class Sub(Base): ...` silently dropped every `Field`/`@check` declared on `Base` — a
+  subclass could only see its own directly-declared fields/checks. `Sub` can still override
+  a base field or check by redeclaring it under the same name.
+
 ## [0.7.0] - 2026-09-06
 
 ### Added
