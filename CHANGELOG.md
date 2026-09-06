@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.0] - 2026-09-06
+
+### Added
+- `ContractSchema.from_dict()` / `from_json()` — reload an exported schema and validate a
+  DataFrame with it, without importing the original `Contract` subclass. Reconstructs types,
+  nullability, and every quality constraint; warns (not silently) about `@check`/`condition`
+  rules the original contract had that can't be re-run, since their logic was never part of
+  the export.
+- `to_dict()` field entries gain `"type_json"` alongside the existing human-readable `"type"`
+  string, giving `ContractSchema` a PySpark-native, officially supported way to reconstruct
+  the exact type (via `StructType.jsonValue()`/`fromJson()`, wrapping the single field so
+  nested/composite types round-trip too — plain `DataType` has no generic `fromJson()`).
+
+### Changed
+- Internal refactor: `validate()` moved from `Contract` onto a shared `_ValidationMixin`, so
+  `ContractSchema` reuses the identical validation pipeline instead of a second
+  implementation. No observable behavior change for `Contract`.
+
 ## [0.6.0] - 2026-09-06
 
 ### Added

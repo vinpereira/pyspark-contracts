@@ -209,6 +209,26 @@ Or print a quick human-readable summary:
 print(AssetHdrTelemetryReadingContract.describe())
 ```
 
+## Sharing a schema without the Python class
+
+Reload an exported schema and validate with it, without importing the original `Contract`
+subclass:
+
+```python
+from pyspark_contracts import ContractSchema
+
+schema_dict = AssetHdrTelemetryReadingContract.to_dict()
+ContractSchema.from_dict(schema_dict).validate(df)
+
+# Or straight from JSON
+ContractSchema.from_json(json_str).validate(df)
+```
+
+`ContractSchema` reconstructs everything `to_dict()` captured as data — types, nullability,
+and every quality constraint. It cannot reconstruct `@check` methods or `condition` lambdas
+(arbitrary Python code was never serialized) — `from_dict()`/`from_json()` emit a warning
+naming any such rules the original contract had, so you know they won't be enforced.
+
 ## Log output
 
 Both modes emit the same structured JSON before acting:
