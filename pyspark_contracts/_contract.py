@@ -1,4 +1,5 @@
 import inspect
+import json
 import logging
 import os
 from collections.abc import Callable
@@ -29,6 +30,46 @@ class ContractMeta(type):
 class Contract(metaclass=ContractMeta):
     _fields: dict[str, Field]
     _checks: dict[str, Callable]
+
+    @classmethod
+    def to_dict(cls) -> dict:
+        fields: dict[str, dict] = {}
+        for name, field in cls._fields.items():
+            entry: dict = {
+                "type": field.dtype.simpleString(),
+                "nullable": field.nullable,
+            }
+            if field.min_value is not None:
+                entry["min_value"] = field.min_value
+            if field.max_value is not None:
+                entry["max_value"] = field.max_value
+            if field.min_length is not None:
+                entry["min_length"] = field.min_length
+            if field.max_length is not None:
+                entry["max_length"] = field.max_length
+            if field.regex is not None:
+                entry["regex"] = field.regex
+            if field.allowed_values is not None:
+                entry["allowed_values"] = field.allowed_values
+            if field.condition_description is not None:
+                entry["condition_description"] = field.condition_description
+            if field.description is not None:
+                entry["description"] = field.description
+            if field.metadata is not None:
+                entry["metadata"] = field.metadata
+            fields[name] = entry
+
+        checks = {name: method._check_description for name, method in cls._checks.items()}
+
+        return {
+            "contract": cls.__name__,
+            "fields": fields,
+            "checks": checks,
+        }
+
+    @classmethod
+    def to_json(cls) -> str:
+        return json.dumps(cls.to_dict(), indent=2)
 
     def validate(
         self,
