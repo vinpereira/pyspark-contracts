@@ -12,6 +12,9 @@ class ContractMeta(type):
     def __new__(mcs, name, bases, namespace):
         fields: dict[str, Field] = {}
         checks: dict[str, Callable] = {}
+        for base in bases:
+            fields.update(getattr(base, "_fields", {}))
+            checks.update(getattr(base, "_checks", {}))
         for attr_name, value in namespace.items():
             if isinstance(value, Field):
                 fields[attr_name] = value

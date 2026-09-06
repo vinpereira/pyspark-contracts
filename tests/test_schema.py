@@ -7,6 +7,7 @@ from pyspark.sql.types import (
     StructType,
 )
 
+from pyspark_contracts._check import check
 from pyspark_contracts._contract import Contract
 from pyspark_contracts._field import Field
 from pyspark_contracts._report import ContractViolationError
@@ -20,6 +21,41 @@ def test_contract_metaclass_collects_fields():
     assert "vin" in OdometerContract._fields
     assert "odometer" in OdometerContract._fields
     assert isinstance(OdometerContract._fields["vin"].dtype, StringType)
+
+
+def test_contract_subclass_inherits_base_fields():
+    class Base(Contract):
+        vin = Field(StringType())
+
+    class Sub(Base):
+        odometer = Field(FloatType())
+
+    assert "vin" in Sub._fields
+    assert "odometer" in Sub._fields
+
+
+def test_contract_subclass_can_override_base_field():
+    class Base(Contract):
+        vin = Field(StringType())
+
+    class Sub(Base):
+        vin = Field(StringType(), nullable=False)
+
+    assert Sub._fields["vin"].nullable is False
+
+
+def test_contract_subclass_inherits_base_checks():
+    class Base(Contract):
+        odometer = Field(FloatType())
+
+        @check("odometer must be non-negative")
+        def no_negative(self, df):
+            return df
+
+    class Sub(Base):
+        vin = Field(StringType())
+
+    assert "no_negative" in Sub._checks
 
 
 def test_validate_passes_when_schema_matches(spark):
