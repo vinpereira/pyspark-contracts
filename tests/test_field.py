@@ -63,3 +63,28 @@ def test_field_condition_description_can_be_set():
 def test_field_nullable_false_sets_quality_constraint():
     f = Field(FloatType(), nullable=False)
     assert f.has_quality_constraints()
+
+
+def test_field_description_defaults_to_none():
+    f = Field(FloatType())
+    assert f.description is None
+
+
+def test_field_description_can_be_set():
+    f = Field(FloatType(), description="Odometer reading in km")
+    assert f.description == "Odometer reading in km"
+
+
+def test_field_metadata_defaults_to_none():
+    f = Field(FloatType())
+    assert f.metadata is None
+
+
+def test_field_metadata_can_be_set():
+    f = Field(FloatType(), metadata={"unit": "km"})
+    assert f.metadata == {"unit": "km"}
+
+
+def test_field_description_and_metadata_do_not_count_as_quality_constraints():
+    f = Field(FloatType(), description="x", metadata={"a": 1})
+    assert not f.has_quality_constraints()

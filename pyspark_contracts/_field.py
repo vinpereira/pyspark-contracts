@@ -18,6 +18,8 @@ class Field:
         allowed_values: list | None = None,
         condition: Callable[[str], Column] | None = None,
         condition_description: str | None = None,
+        description: str | None = None,
+        metadata: dict | None = None,
     ) -> None:
         self.dtype = dtype
         self.nullable = nullable
@@ -29,6 +31,8 @@ class Field:
         self.allowed_values = allowed_values
         self.condition = condition
         self.condition_description = condition_description
+        self.description = description
+        self.metadata = metadata
 
     def has_quality_constraints(self) -> bool:
         return any(
