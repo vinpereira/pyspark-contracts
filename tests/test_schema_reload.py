@@ -27,6 +27,14 @@ def test_from_dict_reconstructs_decimal_precision_and_scale():
     assert schema._fields["meter_reading_value"].dtype == DecimalType(26, 12)
 
 
+def test_from_dict_reconstructs_unique():
+    class MyContract(Contract):
+        vin = Field(StringType(), unique=True)
+
+    schema = ContractSchema.from_dict(MyContract.to_dict())
+    assert schema._fields["vin"].unique is True
+
+
 def test_from_dict_reconstructs_quality_constraints():
     class MyContract(Contract):
         odometer = Field(FloatType(), min_value=0.0, max_value=100.0)
@@ -131,3 +139,26 @@ def test_check_kwarg_rejected_since_no_checks_exist(spark):
     df = spark.createDataFrame([(1.0,)], StructType([StructField("odometer", FloatType())]))
     with pytest.raises(TypeError):
         schema.validate(df, mode="soft", threshold=10.0)
+
+
+def test_from_dict_reconstructs_min_rows_and_max_rows():
+    class MyContract(Contract):
+        min_rows = 10
+        max_rows = 1000
+        vin = Field(StringType())
+
+    schema = ContractSchema.from_dict(MyContract.to_dict())
+    assert schema.min_rows == 10
+    assert schema.max_rows == 1000
+
+
+def test_reloaded_schema_enforces_min_rows(spark):
+    class MyContract(Contract):
+        min_rows = 5
+        vin = Field(StringType())
+
+    schema = ContractSchema.from_dict(MyContract.to_dict())
+    df = spark.createDataFrame([("a",), ("b",)], StructType([StructField("vin", StringType())]))
+    report = schema.validate(df, mode="soft")
+    assert len(report.violations) == 1
+    assert report.violations[0].kind == "row_count_out_of_range"

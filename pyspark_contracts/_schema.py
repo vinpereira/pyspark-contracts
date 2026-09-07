@@ -14,10 +14,18 @@ from pyspark_contracts._validation import _ValidationMixin
 class ContractSchema(
     _ValidationMixin, _SchemaCheckMixin, _QualityCheckMixin, _CustomCheckMixin, _DatasetCheckMixin
 ):
-    def __init__(self, contract_name: str, fields: dict[str, Field]) -> None:
+    def __init__(
+        self,
+        contract_name: str,
+        fields: dict[str, Field],
+        min_rows: int | None = None,
+        max_rows: int | None = None,
+    ) -> None:
         self._name = contract_name
         self._fields = fields
         self._checks: dict[str, Callable] = {}
+        self.min_rows = min_rows
+        self.max_rows = max_rows
 
     def _report_name(self) -> str:
         return self._name
@@ -37,6 +45,7 @@ class ContractSchema(
                 allowed_values=entry.get("allowed_values"),
                 description=entry.get("description"),
                 metadata=entry.get("metadata"),
+                unique=entry.get("unique", False),
             )
 
         unenforceable = list(schema_dict.get("checks", {}).keys())
@@ -53,7 +62,12 @@ class ContractSchema(
                 stacklevel=2,
             )
 
-        return cls(schema_dict["contract"], fields)
+        return cls(
+            schema_dict["contract"],
+            fields,
+            min_rows=schema_dict.get("min_rows"),
+            max_rows=schema_dict.get("max_rows"),
+        )
 
     @classmethod
     def from_json(cls, json_str: str) -> "ContractSchema":

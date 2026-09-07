@@ -81,3 +81,22 @@ def test_describe_includes_unique():
 
     output = MyContract.describe()
     assert "unique" in output
+
+
+def test_describe_includes_row_bounds():
+    class MyContract(Contract):
+        min_rows = 10
+        max_rows = 1000
+        vin = Field(StringType())
+
+    output = MyContract.describe()
+    assert "min_rows=10" in output
+    assert "max_rows=1000" in output
+
+
+def test_describe_omits_row_bounds_line_when_unset():
+    class MyContract(Contract):
+        vin = Field(StringType())
+
+    output = MyContract.describe()
+    assert "Rows:" not in output

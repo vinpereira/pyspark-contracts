@@ -124,3 +124,23 @@ def test_to_dict_omits_unique_when_not_set():
 
     d = MyContract.to_dict()
     assert "unique" not in d["fields"]["vin"]
+
+
+def test_to_dict_includes_min_rows_and_max_rows():
+    class MyContract(Contract):
+        min_rows = 10
+        max_rows = 1000
+        vin = Field(StringType())
+
+    d = MyContract.to_dict()
+    assert d["min_rows"] == 10
+    assert d["max_rows"] == 1000
+
+
+def test_to_dict_omits_min_rows_and_max_rows_when_unset():
+    class MyContract(Contract):
+        vin = Field(StringType())
+
+    d = MyContract.to_dict()
+    assert "min_rows" not in d
+    assert "max_rows" not in d

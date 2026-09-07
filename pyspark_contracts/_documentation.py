@@ -37,11 +37,16 @@ class _DocumentationMixin:
 
         checks = {name: method._check_description for name, method in cls._checks.items()}
 
-        return {
+        result = {
             "contract": cls.__name__,
             "fields": fields,
             "checks": checks,
         }
+        if cls.min_rows is not None:
+            result["min_rows"] = cls.min_rows
+        if cls.max_rows is not None:
+            result["max_rows"] = cls.max_rows
+        return result
 
     @classmethod
     def to_json(cls) -> str:
@@ -87,6 +92,15 @@ class _DocumentationMixin:
                 parts.append(f"[{metadata_str}]")
 
             lines.append("  ".join(parts))
+
+        if cls.min_rows is not None or cls.max_rows is not None:
+            bounds = []
+            if cls.min_rows is not None:
+                bounds.append(f"min_rows={cls.min_rows}")
+            if cls.max_rows is not None:
+                bounds.append(f"max_rows={cls.max_rows}")
+            lines.append("")
+            lines.append(f"Rows: {', '.join(bounds)}")
 
         if cls._checks:
             lines.append("")
