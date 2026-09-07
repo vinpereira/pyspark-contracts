@@ -142,6 +142,32 @@ class _QualityCheckMixin:
                     if not lazy:
                         return violations
 
+            if field.unique:
+                duplicate_groups = (
+                    df.filter(F.col(col_name).isNotNull())
+                    .groupBy(col_name)
+                    .count()
+                    .filter(F.col("count") > 1)
+                )
+                fail = duplicate_groups.agg(F.sum("count")).collect()[0][0] or 0
+                if fail:
+                    sample = [
+                        row[col_name]
+                        for row in duplicate_groups.select(col_name).limit(5).collect()
+                    ]
+                    violations.append(
+                        Violation(
+                            kind="duplicate_value",
+                            column=col_name,
+                            constraint="unique",
+                            row_pct=round(fail / row_count * 100, 1),
+                            failure_count=fail,
+                            sample_values=sample,
+                        )
+                    )
+                    if not lazy:
+                        return violations
+
             if field.condition is not None and not blocks_cross_column:
                 condition = ~field.condition(col_name)
                 fail = df.filter(condition).count()

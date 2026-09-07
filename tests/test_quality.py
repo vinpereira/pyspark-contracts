@@ -194,3 +194,40 @@ def test_quality_skipped_for_columns_with_schema_violations(spark):
     kinds = [v.kind for v in report.violations]
     assert "type_mismatch" in kinds
     assert "value_out_of_range" not in kinds
+
+
+def test_unique_violation(spark):
+    class MyContract(Contract):
+        vin = Field(StringType(), unique=True)
+
+    schema = StructType([StructField("vin", StringType())])
+    df = spark.createDataFrame([("a",), ("a",), ("b",), ("a",), ("c",)], schema)
+    report = MyContract().validate(df, mode="soft")
+    assert len(report.violations) == 1
+    v = report.violations[0]
+    assert v.kind == "duplicate_value"
+    assert v.column == "vin"
+    assert v.constraint == "unique"
+    assert v.failure_count == 3
+    assert v.row_pct == pytest.approx(60.0, abs=0.1)
+    assert v.sample_values == ["a"]
+
+
+def test_no_unique_violation_when_all_values_distinct(spark):
+    class MyContract(Contract):
+        vin = Field(StringType(), unique=True)
+
+    schema = StructType([StructField("vin", StringType())])
+    df = spark.createDataFrame([("a",), ("b",), ("c",)], schema)
+    report = MyContract().validate(df, mode="soft")
+    assert not report
+
+
+def test_unique_ignores_nulls(spark):
+    class MyContract(Contract):
+        vin = Field(StringType(), unique=True)
+
+    schema = StructType([StructField("vin", StringType())])
+    df = spark.createDataFrame([(None,), (None,), ("a",)], schema)
+    report = MyContract().validate(df, mode="soft")
+    assert not report

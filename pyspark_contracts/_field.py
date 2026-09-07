@@ -20,6 +20,7 @@ class Field:
         condition_description: str | None = None,
         description: str | None = None,
         metadata: dict | None = None,
+        unique: bool = False,
     ) -> None:
         self.dtype = dtype
         self.nullable = nullable
@@ -33,6 +34,7 @@ class Field:
         self.condition_description = condition_description
         self.description = description
         self.metadata = metadata
+        self.unique = unique
 
     def has_quality_constraints(self) -> bool:
         return any(
@@ -45,5 +47,6 @@ class Field:
                 self.regex is not None,
                 self.allowed_values is not None,
                 self.condition is not None,
+                self.unique,
             ]
         )

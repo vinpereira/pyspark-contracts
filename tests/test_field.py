@@ -88,3 +88,14 @@ def test_field_metadata_can_be_set():
 def test_field_description_and_metadata_do_not_count_as_quality_constraints():
     f = Field(FloatType(), description="x", metadata={"a": 1})
     assert not f.has_quality_constraints()
+
+
+def test_field_unique_defaults_to_false():
+    f = Field(StringType())
+    assert f.unique is False
+
+
+def test_field_unique_sets_quality_constraint():
+    f = Field(StringType(), unique=True)
+    assert f.has_quality_constraints()
+    assert f.unique is True
