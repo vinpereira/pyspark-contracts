@@ -3,6 +3,7 @@ import warnings
 from collections.abc import Callable
 
 from pyspark_contracts._custom_checks import _CustomCheckMixin
+from pyspark_contracts._dataset_checks import _DatasetCheckMixin
 from pyspark_contracts._dtype_json import dtype_from_json
 from pyspark_contracts._field import Field
 from pyspark_contracts._quality_checks import _QualityCheckMixin
@@ -10,7 +11,9 @@ from pyspark_contracts._schema_checks import _SchemaCheckMixin
 from pyspark_contracts._validation import _ValidationMixin
 
 
-class ContractSchema(_ValidationMixin, _SchemaCheckMixin, _QualityCheckMixin, _CustomCheckMixin):
+class ContractSchema(
+    _ValidationMixin, _SchemaCheckMixin, _QualityCheckMixin, _CustomCheckMixin, _DatasetCheckMixin
+):
     def __init__(self, contract_name: str, fields: dict[str, Field]) -> None:
         self._name = contract_name
         self._fields = fields

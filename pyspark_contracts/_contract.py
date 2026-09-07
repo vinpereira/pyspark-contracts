@@ -1,6 +1,7 @@
 from collections.abc import Callable
 
 from pyspark_contracts._custom_checks import _CustomCheckMixin
+from pyspark_contracts._dataset_checks import _DatasetCheckMixin
 from pyspark_contracts._documentation import _DocumentationMixin
 from pyspark_contracts._field import Field
 from pyspark_contracts._quality_checks import _QualityCheckMixin
@@ -31,6 +32,7 @@ class Contract(
     _SchemaCheckMixin,
     _QualityCheckMixin,
     _CustomCheckMixin,
+    _DatasetCheckMixin,
     metaclass=ContractMeta,
 ):
     _fields: dict[str, Field]

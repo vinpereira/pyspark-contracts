@@ -9,6 +9,9 @@ from pyspark_contracts._report import ContractViolationError, Violation, Violati
 
 
 class _ValidationMixin:
+    min_rows: int | None = None
+    max_rows: int | None = None
+
     def _report_name(self) -> str:
         return type(self).__name__
 
@@ -43,7 +46,8 @@ class _ValidationMixin:
             lazy or not violations
         ):
             row_count = df.count()
-            if row_count > 0:
+            violations += self._check_dataset(row_count, lazy=lazy)
+            if row_count > 0 and (lazy or not violations):
                 violated_columns = {v.column for v in violations}
                 violations += self._check_quality(
                     df,
