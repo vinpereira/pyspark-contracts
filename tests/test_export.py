@@ -108,3 +108,19 @@ def test_to_dict_field_includes_type_json_that_round_trips():
     assert "type_json" in field
     reconstructed = dtype_from_json(field["type_json"])
     assert reconstructed == DecimalType(26, 12)
+
+
+def test_to_dict_field_includes_unique():
+    class MyContract(Contract):
+        vin = Field(StringType(), unique=True)
+
+    d = MyContract.to_dict()
+    assert d["fields"]["vin"]["unique"] is True
+
+
+def test_to_dict_omits_unique_when_not_set():
+    class MyContract(Contract):
+        vin = Field(StringType())
+
+    d = MyContract.to_dict()
+    assert "unique" not in d["fields"]["vin"]

@@ -27,6 +27,8 @@ class _DocumentationMixin:
                 entry["allowed_values"] = field.allowed_values
             if field.condition_description is not None:
                 entry["condition_description"] = field.condition_description
+            if field.unique:
+                entry["unique"] = True
             if field.description is not None:
                 entry["description"] = field.description
             if field.metadata is not None:
@@ -68,6 +70,8 @@ class _DocumentationMixin:
                 constraints.append(f"allowed_values={field.allowed_values}")
             if field.condition_description is not None:
                 constraints.append(f"condition={field.condition_description!r}")
+            if field.unique:
+                constraints.append("unique")
 
             parts = [
                 f"  {name:<{name_width}}",

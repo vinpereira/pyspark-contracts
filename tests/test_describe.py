@@ -73,3 +73,11 @@ def test_describe_omits_checks_section_when_no_checks():
 
     output = MyContract.describe()
     assert "Checks:" not in output
+
+
+def test_describe_includes_unique():
+    class MyContract(Contract):
+        vin = Field(StringType(), unique=True)
+
+    output = MyContract.describe()
+    assert "unique" in output
