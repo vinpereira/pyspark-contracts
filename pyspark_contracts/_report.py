@@ -7,7 +7,7 @@ from pyspark_contracts._depth import ValidationDepth
 @dataclass
 class Violation:
     kind: str
-    column: str
+    column: str | None = None
     expected_type: str | None = None
     actual_type: str | None = None
     constraint: str | None = None
