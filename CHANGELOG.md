@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.0] - 2026-09-07
+
+### Added
+- `unique` constraint on `Field` — fails when a column has duplicate non-null values.
+  `sample_values` on the resulting `duplicate_value` violation are the duplicated values
+  themselves (not full rows); `failure_count` counts every row belonging to a duplicate
+  group. Costlier than other constraints (`groupBy`, not a plain `filter().count()`).
+- `min_rows` / `max_rows` — dataset-level checks declared as plain class attributes on
+  `Contract`, asserting something about the DataFrame as a whole rather than a single
+  column. Checked right after the row count is known, so they apply under `DATA_ONLY` and
+  `SCHEMA_AND_DATA` depth. Being plain data (not code), they round-trip through
+  `to_dict()`/`ContractSchema` with no warning, unlike `@check`/`condition`.
+- Both `unique` and `min_rows`/`max_rows` are reflected in `to_dict()` and `describe()`.
+
+### Changed
+- `Violation.column` is now `str | None` (was required `str`) to represent dataset-level
+  violations that don't belong to any single column.
+
 ## [0.7.1] - 2026-09-06
 
 ### Fixed

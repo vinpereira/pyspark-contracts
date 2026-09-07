@@ -151,6 +151,23 @@ factory: the schema is guaranteed by construction, so only the data constraints 
 checking — the reverse case, `DATA_ONLY`, skips column/type checks and assumes the schema is
 already right, without adding a safety net if it isn't.
 
+## Dataset-level checks
+
+`min_rows` / `max_rows` are declared as plain class attributes, not `Field` options — they
+assert something about the DataFrame as a whole rather than a single column:
+
+```python
+class MyContract(Contract):
+    min_rows = 100
+    max_rows = 1_000_000
+    vin = Field(StringType())
+```
+
+Checked right after the row count is known, so they apply under `DATA_ONLY` and
+`SCHEMA_AND_DATA` depth (not `SCHEMA_ONLY`, which never computes a row count). Unlike
+`@check`/`condition`, `min_rows`/`max_rows` are plain data, so they round-trip through
+`to_dict()`/`ContractSchema` with no "can't reconstruct" warning.
+
 ## Disabling validation
 
 ```bash
@@ -181,6 +198,7 @@ If no logger is passed, the library emits JSON to stdout.
 | `max_length` | `int` | Maximum string length. |
 | `regex` | `str` | Regex pattern (must match entire value via `rlike`). |
 | `allowed_values` | `list` | Allowlist of valid values. |
+| `unique` | `bool` | Default `False`. Set `True` to fail when the column has duplicate (non-null) values. |
 
 ## Documenting a contract
 
@@ -281,6 +299,8 @@ filter ispresent(violations)
 | `value_not_allowed` | Value not in `allowed_values` list |
 | `condition_failed` | `Field(condition=...)` expression evaluated to false |
 | `check_failed` | `@check`-decorated method returned non-empty failing rows |
+| `duplicate_value` | `Field(unique=True)` column has repeated (non-null) values |
+| `row_count_out_of_range` | DataFrame row count below `min_rows` or above `max_rows` |
 
 ## Performance note
 
