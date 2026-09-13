@@ -14,6 +14,22 @@ from pyspark_contracts._validation import _ValidationMixin
 class ContractSchema(
     _ValidationMixin, _SchemaCheckMixin, _QualityCheckMixin, _CustomCheckMixin, _DatasetCheckMixin
 ):
+    """Validates a DataFrame from an exported schema, without importing the original
+    :class:`.Contract` subclass.
+
+    Reconstructs everything :meth:`.Contract.to_dict` captured as data — types,
+    nullability, and every quality constraint (including ``min_rows``/``max_rows``) —
+    and shares the exact same ``validate()`` implementation ``Contract`` uses, so a
+    reloaded schema enforces the same rules the original class did. It cannot
+    reconstruct ``@check`` methods or ``Field(condition=...)`` lambdas, since those are
+    arbitrary Python code that was never serialized — :meth:`from_dict`/
+    :meth:`from_json` emit a ``UserWarning`` naming any such rules the original
+    contract had, so you know they won't be enforced.
+
+    Construct via :meth:`from_dict` or :meth:`from_json` — the constructor itself is
+    not the intended entry point.
+    """
+
     def __init__(
         self,
         contract_name: str,
@@ -32,6 +48,21 @@ class ContractSchema(
 
     @classmethod
     def from_dict(cls, schema_dict: dict) -> "ContractSchema":
+        """Builds a ``ContractSchema`` from a dict produced by
+        :meth:`.Contract.to_dict`.
+
+        Args:
+            schema_dict: The dict returned by ``SomeContract.to_dict()``.
+
+        Returns:
+            A ``ContractSchema`` whose ``.validate(df, ...)`` enforces the same
+            structural and data constraints ``SomeContract`` did.
+
+        Warns:
+            UserWarning: If ``schema_dict`` includes any ``@check`` or
+                ``condition_description`` entries — these rules exist in the
+                original contract but have no executable logic to re-run here.
+        """
         fields: dict[str, Field] = {}
         for name, entry in schema_dict["fields"].items():
             fields[name] = Field(
@@ -71,4 +102,7 @@ class ContractSchema(
 
     @classmethod
     def from_json(cls, json_str: str) -> "ContractSchema":
+        """Same as :meth:`from_dict`, from a JSON string (e.g. from
+        :meth:`.Contract.to_json`) instead of a dict.
+        """
         return cls.from_dict(json.loads(json_str))

@@ -25,6 +25,40 @@ class _ValidationMixin:
         logger: logging.Logger | None = None,
         **kwargs,
     ) -> ViolationReport:
+        """Validates ``df`` against this contract's declared fields and checks.
+
+        Runs, in order: structural checks (column presence/type), the dataset-level
+        ``min_rows``/``max_rows`` check, per-field data constraints, and ``@check``
+        methods — each stage gated by ``depth`` and, in fail-fast mode, by whether an
+        earlier stage already found a violation.
+
+        Args:
+            df: The DataFrame to validate.
+            mode: ``"hard"`` (default) logs at ``ERROR`` and raises
+                ``ContractViolationError`` on any violation. ``"soft"`` logs at
+                ``WARNING`` and returns the ``ViolationReport`` instead.
+            lazy: Whether to collect every violation (``True``) or stop at the first
+                one found (``False``), across every stage. Defaults to ``None``,
+                which resolves to fail-fast for ``mode="hard"`` and collect-all for
+                ``mode="soft"``; pass explicitly to override either default.
+            depth: Which stage(s) to run — see :class:`.ValidationDepth`. Defaults to
+                ``ValidationDepth.SCHEMA_AND_DATA`` (everything).
+            logger: A ``logging.Logger`` to emit the structured JSON log entry to.
+                Defaults to this library's built-in logger (JSON to stdout).
+            **kwargs: Forwarded to this contract's ``@check`` methods, routed by
+                parameter name — a kwarg matching no ``@check``'s signature raises
+                ``TypeError``.
+
+        Returns:
+            The :class:`.ViolationReport`. In ``mode="hard"``, only returned when
+            there were no violations — otherwise ``ContractViolationError`` is
+            raised instead.
+
+        Raises:
+            ContractViolationError: In ``mode="hard"``, if any violation was found.
+            TypeError: If a ``**kwargs`` entry doesn't match any ``@check``'s
+                parameters.
+        """
         if os.environ.get("PYSPARK_CONTRACTS_ENABLED", "true").lower() == "false":
             return ViolationReport(self._report_name(), [], None, mode=mode, depth=depth)
 

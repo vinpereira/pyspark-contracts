@@ -6,6 +6,24 @@ from pyspark_contracts._dtype_json import dtype_to_json
 class _DocumentationMixin:
     @classmethod
     def to_dict(cls) -> dict:
+        """Exports this contract's full shape as plain data.
+
+        Includes every field's type (both a human-readable ``simpleString()`` and a
+        machine-readable ``type_json`` for exact reconstruction), nullability, every
+        quality constraint that's set, ``description``/``metadata``, the
+        name/description of every ``@check`` method, and ``min_rows``/``max_rows`` if
+        set. Comprehensive enough to work as a data dictionary or to share a
+        contract's shape without importing the Python class — see
+        :meth:`.ContractSchema.from_dict`.
+
+        ``@check`` methods and ``Field(condition=...)`` lambdas are arbitrary Python
+        code and can never be serialized — only their description text is included,
+        never the executable logic.
+
+        Returns:
+            A dict shaped ``{"contract": ..., "fields": {...}, "checks": {...}}``,
+            with ``"min_rows"``/``"max_rows"`` included only when set.
+        """
         fields: dict[str, dict] = {}
         for name, field in cls._fields.items():
             entry: dict = {
@@ -50,10 +68,22 @@ class _DocumentationMixin:
 
     @classmethod
     def to_json(cls) -> str:
+        """Same as :meth:`to_dict`, serialized to an indented JSON string."""
         return json.dumps(cls.to_dict(), indent=2)
 
     @classmethod
     def describe(cls) -> str:
+        """Returns a human-readable, printable summary of this contract.
+
+        One line per field (name, type, nullability, active constraints,
+        description, metadata), followed by ``min_rows``/``max_rows`` if set and a
+        ``Checks:`` section listing every ``@check``'s name and description, if any.
+        The exact column alignment isn't part of this method's contract — only the
+        information it contains is.
+
+        Example:
+            >>> print(MyContract.describe())
+        """
         lines = [cls.__name__]
         name_width = max((len(n) for n in cls._fields), default=0)
         type_width = max((len(f.dtype.simpleString()) for f in cls._fields.values()), default=0)

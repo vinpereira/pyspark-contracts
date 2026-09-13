@@ -35,5 +35,25 @@ class Contract(
     _DatasetCheckMixin,
     metaclass=ContractMeta,
 ):
+    """Base class for declaring a PySpark DataFrame schema and its data quality rules.
+
+    Subclass it and declare :class:`.Field`\\ s as class attributes — each becomes
+    one expected column:
+
+    >>> from pyspark.sql.types import FloatType, StringType
+    >>> class OdometerContract(Contract):
+    ...     vin = Field(StringType(), nullable=False, min_length=17, max_length=17)
+    ...     odometer_start = Field(FloatType(), nullable=False, min_value=0)
+
+    Then call :meth:`~pyspark_contracts._validation._ValidationMixin.validate` on an
+    instance to check a DataFrame against it. Subclasses also inherit fields and
+    ``@check`` methods declared on their base ``Contract`` classes — a subclass can
+    override an inherited field or check by redeclaring it under the same name.
+
+    Optional class attributes ``min_rows``/``max_rows`` (plain ``int``, not
+    ``Field``) assert something about the DataFrame as a whole rather than a single
+    column — see the dataset-level checks section of the README.
+    """
+
     _fields: dict[str, Field]
     _checks: dict[str, Callable]
