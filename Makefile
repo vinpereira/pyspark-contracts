@@ -1,4 +1,4 @@
-.PHONY: format lint test check benchmark
+.PHONY: format lint test check benchmark docs
 
 format:
 	uv run ruff format pyspark_contracts/ tests/ benchmarks/
@@ -14,3 +14,6 @@ check: format lint test
 
 benchmark:
 	uv run python benchmarks/benchmark_validate.py
+
+docs:
+	uv run --extra docs sphinx-build -b html sphinx-docs/source sphinx-docs/build/html

@@ -23,6 +23,7 @@ Repository = "https://github.com/vinpereira/pyspark-contracts"
 
 [project.optional-dependencies]
 pyspark = ["pyspark>=3.3"]
+docs = ["sphinx>=7", "furo>=2024.1", "myst-parser>=3.0", "pyspark>=3.3"]
 
 [tool.hatch.version]
 path = "pyspark_contracts/__init__.py"
