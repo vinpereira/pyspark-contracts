@@ -20,6 +20,8 @@ classifiers = [
 
 [project.urls]
 Repository = "https://github.com/vinpereira/pyspark-contracts"
+Documentation = "https://pyspark-contracts.readthedocs.io/"
+Changelog = "https://github.com/vinpereira/pyspark-contracts/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 pyspark = ["pyspark>=3.3"]

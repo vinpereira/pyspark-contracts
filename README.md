@@ -1,6 +1,15 @@
 # pyspark-contracts
 
+[![Tests](https://github.com/vinpereira/pyspark-contracts/actions/workflows/test.yml/badge.svg)](https://github.com/vinpereira/pyspark-contracts/actions/workflows/test.yml)
+[![Lint](https://github.com/vinpereira/pyspark-contracts/actions/workflows/lint.yml/badge.svg)](https://github.com/vinpereira/pyspark-contracts/actions/workflows/lint.yml)
+[![Documentation Status](https://readthedocs.org/projects/pyspark-contracts/badge/?version=latest)](https://pyspark-contracts.readthedocs.io/en/latest/?badge=latest)
+[![PyPI](https://img.shields.io/pypi/v/pyspark-contracts)](https://pypi.org/project/pyspark-contracts/)
+[![Python versions](https://img.shields.io/pypi/pyversions/pyspark-contracts)](https://pypi.org/project/pyspark-contracts/)
+[![License](https://img.shields.io/pypi/l/pyspark-contracts)](LICENSE)
+
 Lightweight schema and data quality validation for PySpark DataFrames.
+
+Full documentation: [pyspark-contracts.readthedocs.io](https://pyspark-contracts.readthedocs.io/)
 
 Validates at runtime — before your pipeline runs — with a structured JSON report
 queryable in CloudWatch Logs Insights, Datadog, or any log aggregator.

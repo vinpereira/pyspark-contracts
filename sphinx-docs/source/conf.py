@@ -35,3 +35,8 @@ source_suffix = {
 exclude_patterns = ["_build"]
 
 html_theme = "furo"
+html_theme_options = {
+    "source_repository": "https://github.com/vinpereira/pyspark-contracts/",
+    "source_branch": "main",
+    "source_directory": "sphinx-docs/source/",
+}
