@@ -56,9 +56,15 @@ class _ValidationMixin:
 
         Raises:
             ContractViolationError: In ``mode="hard"``, if any violation was found.
-            TypeError: If a ``**kwargs`` entry doesn't match any ``@check``'s
-                parameters.
+            ValueError: If ``mode`` isn't ``"hard"`` or ``"soft"``.
+            TypeError: If ``depth`` isn't a :class:`.ValidationDepth`, or if a
+                ``**kwargs`` entry doesn't match any ``@check``'s parameters.
         """
+        if mode not in ("hard", "soft"):
+            raise ValueError(f"validate() mode must be 'hard' or 'soft', got {mode!r}")
+        if not isinstance(depth, ValidationDepth):
+            raise TypeError(f"validate() depth must be a ValidationDepth, got {depth!r}")
+
         if os.environ.get("PYSPARK_CONTRACTS_ENABLED", "true").lower() == "false":
             return ViolationReport(self._report_name(), [], None, mode=mode, depth=depth)
 

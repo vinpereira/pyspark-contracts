@@ -188,3 +188,23 @@ def test_validate_nullable_false_skipped_on_type_mismatch(spark):
     report = MyContract().validate(df, mode="soft")
     assert len(report.violations) == 1
     assert report.violations[0].kind == "type_mismatch"
+
+
+def test_validate_rejects_invalid_mode(spark):
+    class MyContract(Contract):
+        odometer = Field(FloatType())
+
+    schema = StructType([StructField("odometer", FloatType())])
+    df = spark.createDataFrame([(1.0,)], schema)
+    with pytest.raises(ValueError):
+        MyContract().validate(df, mode="Hard")
+
+
+def test_validate_rejects_invalid_depth(spark):
+    class MyContract(Contract):
+        odometer = Field(FloatType())
+
+    schema = StructType([StructField("odometer", FloatType())])
+    df = spark.createDataFrame([(1.0,)], schema)
+    with pytest.raises(TypeError):
+        MyContract().validate(df, mode="soft", depth="schema_only")

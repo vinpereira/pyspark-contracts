@@ -1,7 +1,11 @@
 from collections.abc import Callable
+from datetime import date, datetime
+from decimal import Decimal
 
 from pyspark.sql import Column
 from pyspark.sql.types import DataType
+
+_Comparable = int | float | Decimal | date | datetime
 
 
 class Field:
@@ -57,8 +61,8 @@ class Field:
         dtype: DataType,
         *,
         nullable: bool = True,
-        min_value=None,
-        max_value=None,
+        min_value: _Comparable | None = None,
+        max_value: _Comparable | None = None,
         min_length: int | None = None,
         max_length: int | None = None,
         regex: str | None = None,
@@ -83,7 +87,7 @@ class Field:
         self.metadata = metadata
         self.unique = unique
 
-    def has_quality_constraints(self) -> bool:
+    def _has_quality_constraints(self) -> bool:
         """Whether this field declares at least one row-level data constraint.
 
         True if ``nullable=False``, ``unique=True``, ``condition`` is set, or any of

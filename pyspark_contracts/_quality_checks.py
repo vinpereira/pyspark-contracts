@@ -20,7 +20,7 @@ class _QualityCheckMixin:
         violations: list[Violation] = []
 
         for col_name, field in self._fields.items():
-            if col_name in skip_columns or not field.has_quality_constraints():
+            if col_name in skip_columns or not field._has_quality_constraints():
                 continue
 
             if not field.nullable:
