@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.1] - 2026-09-14
+
+### Fixed
+- `validate()` now rejects an invalid `mode` with `ValueError` instead of silently
+  treating anything other than the literal string `"hard"` as soft mode — a typo
+  (e.g. `mode="Hard"`) previously disabled the raise-on-violation behavior without
+  any warning.
+- `validate()` now rejects a `depth` that isn't a `ValidationDepth` with `TypeError`
+  instead of silently skipping both the schema and data check stages, which
+  previously produced an always-passing report without validating anything.
+
+### Changed
+- `Field.min_value`/`max_value` now have proper type hints (previously the only two
+  untyped parameters on `Field`).
+- `Field.has_quality_constraints()` is now private (`_has_quality_constraints()`) —
+  it was never meant for external use, only for the library's own per-field
+  constraint dispatch. Done now, ahead of the v1.0.0 API stability guarantee, while
+  it's still a free (SemVer 0.x) change.
+
 ## [0.8.0] - 2026-09-07
 
 ### Added
