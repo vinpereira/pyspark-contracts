@@ -65,6 +65,12 @@ class ContractSchema(
         """
         fields: dict[str, Field] = {}
         for name, entry in schema_dict["fields"].items():
+            if "type_json" not in entry:
+                raise ValueError(
+                    f"ContractSchema.from_dict(): field '{name}' has no 'type_json' entry — "
+                    f"this dict looks like it was exported by a version of Contract.to_dict() "
+                    f"older than 0.7.0, which ContractSchema cannot reload"
+                )
             fields[name] = Field(
                 dtype_from_json(entry["type_json"]),
                 nullable=entry.get("nullable", True),

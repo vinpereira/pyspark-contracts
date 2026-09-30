@@ -152,6 +152,15 @@ def test_from_dict_reconstructs_min_rows_and_max_rows():
     assert schema.max_rows == 1000
 
 
+def test_from_dict_raises_clear_error_on_missing_type_json():
+    legacy_dict = {
+        "contract": "MyContract",
+        "fields": {"odometer": {"nullable": True}},
+    }
+    with pytest.raises(ValueError, match="type_json"):
+        ContractSchema.from_dict(legacy_dict)
+
+
 def test_reloaded_schema_enforces_min_rows(spark):
     class MyContract(Contract):
         min_rows = 5
