@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.2] - 2026-09-30
+
+### Fixed
+- `check_output()`/`check_input()` now reject an invalid `mode` with `ValueError` at
+  decoration time, instead of only failing once the decorated function is first
+  called.
+- `ContractSchema.from_dict()` now raises a clear `ValueError` naming the offending
+  field when an entry is missing `type_json` (e.g. a dict exported by a
+  pre-0.7.0 `Contract.to_dict()`), instead of a raw `KeyError`.
+
 ## [0.8.1] - 2026-09-14
 
 ### Fixed
