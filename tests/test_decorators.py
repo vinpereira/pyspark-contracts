@@ -89,6 +89,14 @@ def test_check_output_rejects_non_contract_class():
         check_output(object)
 
 
+def test_check_output_rejects_invalid_mode_at_decoration_time():
+    class MyContract(Contract):
+        odometer = Field(FloatType())
+
+    with pytest.raises(ValueError):
+        check_output(MyContract, mode="Hard")
+
+
 def test_check_input_validates_before_function_runs(spark):
     class MyContract(Contract):
         odometer = Field(FloatType())
@@ -166,6 +174,14 @@ def test_check_input_raises_at_decoration_time_for_unknown_param():
 def test_check_input_rejects_non_contract_class():
     with pytest.raises(TypeError):
         check_input(object, param="df")
+
+
+def test_check_input_rejects_invalid_mode_at_decoration_time():
+    class MyContract(Contract):
+        odometer = Field(FloatType())
+
+    with pytest.raises(ValueError):
+        check_input(MyContract, param="df", mode="Hard")
 
 
 def test_stacked_check_input_validates_both_params(spark):

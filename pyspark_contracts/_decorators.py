@@ -34,6 +34,8 @@ def check_output(
     """
     if not (isinstance(contract_cls, type) and issubclass(contract_cls, Contract)):
         raise TypeError(f"check_output() expects a Contract subclass, got {contract_cls!r}")
+    if mode not in ("hard", "soft"):
+        raise ValueError(f"check_output() mode must be 'hard' or 'soft', got {mode!r}")
 
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
@@ -77,6 +79,8 @@ def check_input(
     """
     if not (isinstance(contract_cls, type) and issubclass(contract_cls, Contract)):
         raise TypeError(f"check_input() expects a Contract subclass, got {contract_cls!r}")
+    if mode not in ("hard", "soft"):
+        raise ValueError(f"check_input() mode must be 'hard' or 'soft', got {mode!r}")
 
     def decorator(func: Callable) -> Callable:
         sig = inspect.signature(func)
