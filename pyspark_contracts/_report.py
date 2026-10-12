@@ -1,7 +1,35 @@
 import dataclasses
 from dataclasses import dataclass
+from enum import Enum
 
 from pyspark_contracts._depth import ValidationDepth
+
+
+class ViolationKind(str, Enum):
+    """The type of a :class:`Violation`.
+
+    A ``str`` subclass, so each member compares equal to — and formats as — its
+    plain string value: ``ViolationKind.NULL_VIOLATION == "null_violation"``.
+    """
+
+    MISSING_COLUMN = "missing_column"
+    TYPE_MISMATCH = "type_mismatch"
+    NULL_VIOLATION = "null_violation"
+    VALUE_OUT_OF_RANGE = "value_out_of_range"
+    LENGTH_OUT_OF_RANGE = "length_out_of_range"
+    REGEX_MISMATCH = "regex_mismatch"
+    VALUE_NOT_ALLOWED = "value_not_allowed"
+    CONDITION_FAILED = "condition_failed"
+    CHECK_FAILED = "check_failed"
+    DUPLICATE_VALUE = "duplicate_value"
+    ROW_COUNT_OUT_OF_RANGE = "row_count_out_of_range"
+
+    # Python 3.11+ formats a (str, Enum) member as "ViolationKind.X"; keep the plain
+    # value on every supported version, as enum.StrEnum (3.11+ only) does.
+    def __str__(self) -> str:
+        return self.value
+
+    __format__ = str.__format__
 
 
 @dataclass
@@ -9,13 +37,14 @@ class Violation:
     """One failed constraint from a :meth:`.Contract.validate` run.
 
     Attributes:
-        kind: The violation type, e.g. ``"missing_column"``, ``"type_mismatch"``,
-            ``"null_violation"``, ``"value_out_of_range"``, ``"length_out_of_range"``,
-            ``"regex_mismatch"``, ``"value_not_allowed"``, ``"condition_failed"``,
-            ``"check_failed"``, ``"duplicate_value"``, ``"row_count_out_of_range"``.
-        column: The field this violation belongs to, or ``None`` for a
-            ``row_count_out_of_range`` violation, which is about the DataFrame as a
-            whole rather than any single column.
+        kind: The violation type, a :class:`ViolationKind`. A plain string such as
+            ``"missing_column"`` is accepted and converted; an unknown one raises
+            ``ValueError``.
+        column: The field this violation belongs to, or ``None`` for violations
+            that aren't about a single column: ``row_count_out_of_range`` (the
+            DataFrame as a whole) and ``check_failed`` (see ``check``).
+        check: For ``check_failed`` — the name of the ``@check`` method that found
+            failing rows.
         expected_type: For ``missing_column``/``type_mismatch`` — the declared
             ``Field`` type as a Spark type string (``DataType.simpleString()``,
             e.g. ``"decimal(26,12)"``, ``"array<string>"``).
@@ -37,14 +66,18 @@ class Violation:
             column values, since a ``@check`` can span multiple columns.
     """
 
-    kind: str
+    kind: ViolationKind
     column: str | None = None
+    check: str | None = None
     expected_type: str | None = None
     actual_type: str | None = None
     constraint: str | None = None
     row_pct: float | None = None
     failure_count: int | None = None
     sample_values: list | None = None
+
+    def __post_init__(self) -> None:
+        self.kind = ViolationKind(self.kind)
 
 
 class ViolationReport:
@@ -95,7 +128,11 @@ class ViolationReport:
             "mode": self.mode,
             "depth": self.depth.value,
             "violations": [
-                {k: v for k, v in dataclasses.asdict(violation).items() if v is not None}
+                {
+                    k: v.value if isinstance(v, ViolationKind) else v
+                    for k, v in dataclasses.asdict(violation).items()
+                    if v is not None
+                }
                 for violation in self.violations
             ],
             "row_count": self.row_count,

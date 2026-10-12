@@ -1,4 +1,4 @@
-from pyspark_contracts._report import Violation
+from pyspark_contracts._report import Violation, ViolationKind
 
 
 class _DatasetCheckMixin:
@@ -8,7 +8,7 @@ class _DatasetCheckMixin:
         if self.min_rows is not None and row_count < self.min_rows:
             violations.append(
                 Violation(
-                    kind="row_count_out_of_range",
+                    kind=ViolationKind.ROW_COUNT_OUT_OF_RANGE,
                     column=None,
                     constraint=f"min_rows={self.min_rows} (actual: {row_count})",
                 )
@@ -19,7 +19,7 @@ class _DatasetCheckMixin:
         if self.max_rows is not None and row_count > self.max_rows:
             violations.append(
                 Violation(
-                    kind="row_count_out_of_range",
+                    kind=ViolationKind.ROW_COUNT_OUT_OF_RANGE,
                     column=None,
                     constraint=f"max_rows={self.max_rows} (actual: {row_count})",
                 )

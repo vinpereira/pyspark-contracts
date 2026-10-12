@@ -60,6 +60,14 @@ Generated from the docstrings in `pyspark_contracts`.
    :members:
 ```
 
+## ViolationKind
+
+```{eval-rst}
+.. autoclass:: pyspark_contracts.ViolationKind
+   :members:
+   :undoc-members:
+```
+
 ## ContractViolationError
 
 ```{eval-rst}

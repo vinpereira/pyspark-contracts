@@ -5,7 +5,12 @@ from pyspark.sql import DataFrame
 
 from pyspark_contracts._depth import ValidationDepth
 from pyspark_contracts._logging import get_logger
-from pyspark_contracts._report import ContractViolationError, Violation, ViolationReport
+from pyspark_contracts._report import (
+    ContractViolationError,
+    Violation,
+    ViolationKind,
+    ViolationReport,
+)
 
 
 class _ValidationMixin:
@@ -79,7 +84,8 @@ class _ValidationMixin:
         if depth in (ValidationDepth.SCHEMA_ONLY, ValidationDepth.SCHEMA_AND_DATA):
             violations = self._check_schema(df, lazy=lazy)
             blocks_cross_column = any(
-                v.kind in ("missing_column", "type_mismatch") for v in violations
+                v.kind in (ViolationKind.MISSING_COLUMN, ViolationKind.TYPE_MISMATCH)
+                for v in violations
             )
 
         if depth in (ValidationDepth.DATA_ONLY, ValidationDepth.SCHEMA_AND_DATA) and (

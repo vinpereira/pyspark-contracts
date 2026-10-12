@@ -295,9 +295,24 @@ filter message = "contract violation — job aborted"
 filter ispresent(violations)
 | flatten violations
 | stats count(*) by violations.kind, violations.column
+
+-- Failing @check methods across all runs
+filter ispresent(violations)
+| flatten violations
+| filter violations.kind = "check_failed"
+| stats count(*) by contract, violations.check
 ```
 
 ## Violation kinds
+
+Each violation's `kind` is a `ViolationKind` member. It's a `str` enum, so comparing it to
+the plain string still works:
+
+```python
+from pyspark_contracts import ViolationKind
+
+nulls = [v for v in report.violations if v.kind == ViolationKind.NULL_VIOLATION]
+```
 
 | Kind | Trigger |
 |------|---------|
@@ -309,7 +324,7 @@ filter ispresent(violations)
 | `regex_mismatch` | Value does not match `regex` pattern |
 | `value_not_allowed` | Value not in `allowed_values` list |
 | `condition_failed` | `Field(condition=...)` expression evaluated to false |
-| `check_failed` | `@check`-decorated method returned non-empty failing rows |
+| `check_failed` | `@check`-decorated method returned non-empty failing rows (named in `check`, not `column`) |
 | `duplicate_value` | `Field(unique=True)` column has repeated (non-null) values |
 | `row_count_out_of_range` | DataFrame row count below `min_rows` or above `max_rows` |
 

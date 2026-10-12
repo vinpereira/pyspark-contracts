@@ -43,7 +43,8 @@ def test_check_failed_violation(spark):
     assert len(report.violations) == 1
     v = report.violations[0]
     assert v.kind == "check_failed"
-    assert v.column == "no_negative"
+    assert v.check == "no_negative"
+    assert v.column is None
     assert v.constraint == "odometer must be non-negative"
     assert v.failure_count == 1
     assert v.sample_values == [{"odometer": -1.0}]
@@ -79,7 +80,7 @@ def test_check_receives_kwargs_from_validate(spark):
     df = spark.createDataFrame([(50.0,)], schema)
     report = MyContract().validate(df, mode="soft", threshold=10.0)
     assert len(report.violations) == 1
-    assert report.violations[0].column == "under_threshold"
+    assert report.violations[0].check == "under_threshold"
 
 
 def test_check_does_not_fire_when_kwarg_leaves_default(spark):
@@ -128,7 +129,7 @@ def test_check_lazy_false_stops_at_first_failing_check(spark):
     df = spark.createDataFrame([(1.0,)], schema)
     report = MyContract().validate(df, mode="soft", lazy=False)
     assert len(report.violations) == 1
-    assert report.violations[0].column == "check_a"
+    assert report.violations[0].check == "check_a"
 
 
 def test_check_skipped_when_missing_column(spark):

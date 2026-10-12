@@ -5,11 +5,14 @@ def test_public_imports():
         ContractViolationError,
         Field,
         ValidationDepth,
+        ViolationKind,
         ViolationReport,
         check,
         check_input,
         check_output,
     )
+
+    assert ViolationKind is not None
 
     assert Contract is not None
     assert Field is not None
