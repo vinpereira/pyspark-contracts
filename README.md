@@ -23,6 +23,8 @@ pip install pyspark-contracts
 PySpark is assumed to be on your classpath (Glue, Databricks, EMR).
 For local development: `pip install pyspark-contracts[pyspark]`
 
+Tested on PySpark 3.3–4.x and Python 3.10–3.14, in both classic mode and Spark Connect.
+
 ## Quick start
 
 ```python
