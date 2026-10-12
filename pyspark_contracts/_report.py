@@ -17,12 +17,15 @@ class Violation:
             ``row_count_out_of_range`` violation, which is about the DataFrame as a
             whole rather than any single column.
         expected_type: For ``missing_column``/``type_mismatch`` — the declared
-            ``Field`` type's class name.
-        actual_type: For ``type_mismatch`` — the DataFrame's actual type's class
-            name.
+            ``Field`` type as a Spark type string (``DataType.simpleString()``,
+            e.g. ``"decimal(26,12)"``, ``"array<string>"``).
+        actual_type: For ``type_mismatch`` — the DataFrame's actual type, in the
+            same format.
         constraint: Human-readable description of the specific constraint that
             failed (e.g. ``"min_value=0"``, ``"nullable"``, a ``condition``'s or
-            ``@check``'s description text).
+            ``@check``'s description text). For a ``type_mismatch`` whose two type
+            strings are identical, explains that the difference is in nested
+            nullability or field metadata, which type strings don't show.
         row_pct: Percentage of rows that failed this constraint. Not set for
             structural (``missing_column``/``type_mismatch``) or dataset-level
             (``row_count_out_of_range``) violations, which aren't about a subset of

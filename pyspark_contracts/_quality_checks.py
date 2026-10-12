@@ -109,7 +109,9 @@ class _QualityCheckMixin:
                         return violations
 
             if field.regex is not None:
-                condition = ~F.col(col_name).rlike(field.regex)
+                # rlike matches anywhere in the value; \A...\z anchors it to the whole value
+                # (unlike ^...$, $ would also accept a trailing newline)
+                condition = ~F.col(col_name).rlike(rf"\A(?:{field.regex})\z")
                 fail = df.filter(condition).count()
                 if fail:
                     violations.append(

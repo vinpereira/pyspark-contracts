@@ -1,5 +1,7 @@
 import pytest
 from pyspark.sql.types import (
+    ArrayType,
+    DecimalType,
     FloatType,
     IntegerType,
     StringType,
@@ -99,6 +101,7 @@ def test_validate_detects_missing_column(spark):
     assert len(report.violations) == 1
     assert report.violations[0].kind == "missing_column"
     assert report.violations[0].column == "odometer"
+    assert report.violations[0].expected_type == "float"
 
 
 def test_validate_detects_type_mismatch(spark):
@@ -109,8 +112,31 @@ def test_validate_detects_type_mismatch(spark):
     report = MyContract().validate(df, mode="soft")
     assert len(report.violations) == 1
     assert report.violations[0].kind == "type_mismatch"
-    assert report.violations[0].expected_type == "StringType"
-    assert report.violations[0].actual_type == "IntegerType"
+    assert report.violations[0].expected_type == "string"
+    assert report.violations[0].actual_type == "int"
+    assert report.violations[0].constraint is None
+
+
+def test_type_mismatch_reports_full_type(spark):
+    class MyContract(Contract):
+        amount = Field(DecimalType(26, 12))
+
+    df = spark.createDataFrame([], StructType([StructField("amount", DecimalType(10, 2))]))
+    violation = MyContract().validate(df, mode="soft").violations[0]
+    assert violation.kind == "type_mismatch"
+    assert violation.expected_type == "decimal(26,12)"
+    assert violation.actual_type == "decimal(10,2)"
+
+
+def test_type_mismatch_flags_difference_hidden_by_type_string(spark):
+    class MyContract(Contract):
+        tags = Field(ArrayType(StringType(), containsNull=False))
+
+    df = spark.createDataFrame([], StructType([StructField("tags", ArrayType(StringType()))]))
+    violation = MyContract().validate(df, mode="soft").violations[0]
+    assert violation.kind == "type_mismatch"
+    assert violation.expected_type == violation.actual_type == "array<string>"
+    assert violation.constraint == "nested nullability or field metadata differs"
 
 
 def test_validate_hard_fail_raises_contract_violation_error(spark):

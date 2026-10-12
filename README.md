@@ -207,7 +207,7 @@ If no logger is passed, the library emits JSON to stdout.
 | `max_value` | numeric / date | Maximum allowed value. |
 | `min_length` | `int` | Minimum string length. |
 | `max_length` | `int` | Maximum string length. |
-| `regex` | `str` | Regex pattern (must match entire value via `rlike`). |
+| `regex` | `str` | Regex pattern the entire value must match — anchored for you, so `"[0-9]+"` rejects `"abc123"`. |
 | `allowed_values` | `list` | Allowlist of valid values. |
 | `unique` | `bool` | Default `False`. Set `True` to fail when the column has duplicate (non-null) values. |
 
@@ -270,7 +270,7 @@ Both modes emit the same structured JSON before acting:
   "mode": "hard",
   "depth": "schema_and_data",
   "violations": [
-    {"kind": "missing_column", "column": "odometerStart", "expected_type": "FloatType"},
+    {"kind": "missing_column", "column": "odometerStart", "expected_type": "float"},
     {
       "kind": "value_out_of_range",
       "column": "odometerEnd",
@@ -302,7 +302,7 @@ filter ispresent(violations)
 | Kind | Trigger |
 |------|---------|
 | `missing_column` | Column declared in contract is absent from the DataFrame |
-| `type_mismatch` | Column exists but type differs from declared type |
+| `type_mismatch` | Column exists but type differs from declared type (reported as Spark type strings, e.g. `decimal(26,12)`) |
 | `null_violation` | `nullable=False` column contains null values |
 | `value_out_of_range` | Value below `min_value` or above `max_value` |
 | `length_out_of_range` | String length below `min_length` or above `max_length` |
