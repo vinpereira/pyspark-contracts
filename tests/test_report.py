@@ -1,5 +1,38 @@
+import json
+
+import pytest
+
 from pyspark_contracts._depth import ValidationDepth
-from pyspark_contracts._report import ContractViolationError, Violation, ViolationReport
+from pyspark_contracts._report import (
+    ContractViolationError,
+    Violation,
+    ViolationKind,
+    ViolationReport,
+)
+
+
+def test_violation_kind_compares_and_formats_as_its_string():
+    assert ViolationKind.NULL_VIOLATION == "null_violation"
+    assert str(ViolationKind.NULL_VIOLATION) == "null_violation"
+    assert f"{ViolationKind.NULL_VIOLATION}" == "null_violation"
+
+
+def test_violation_coerces_kind_string_to_violation_kind():
+    v = Violation(kind="missing_column", column="vin")
+    assert v.kind is ViolationKind.MISSING_COLUMN
+
+
+def test_violation_rejects_unknown_kind():
+    with pytest.raises(ValueError):
+        Violation(kind="not_a_kind")
+
+
+def test_violation_report_to_dict_emits_kind_as_plain_string():
+    v = Violation(kind=ViolationKind.CHECK_FAILED, check="no_negative")
+    violation = ViolationReport("MyContract", [v], 100).to_dict()["violations"][0]
+    assert type(violation["kind"]) is str
+    assert violation == {"kind": "check_failed", "check": "no_negative"}
+    assert json.loads(json.dumps(violation))["kind"] == "check_failed"
 
 
 def test_violation_report_falsy_when_empty():

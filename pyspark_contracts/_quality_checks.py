@@ -1,7 +1,7 @@
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
-from pyspark_contracts._report import Violation
+from pyspark_contracts._report import Violation, ViolationKind
 
 
 class _QualityCheckMixin:
@@ -29,7 +29,7 @@ class _QualityCheckMixin:
                 if fail:
                     violations.append(
                         Violation(
-                            kind="null_violation",
+                            kind=ViolationKind.NULL_VIOLATION,
                             column=col_name,
                             constraint="nullable",
                             row_pct=round(fail / row_count * 100, 1),
@@ -46,7 +46,7 @@ class _QualityCheckMixin:
                 if fail:
                     violations.append(
                         Violation(
-                            kind="value_out_of_range",
+                            kind=ViolationKind.VALUE_OUT_OF_RANGE,
                             column=col_name,
                             constraint=f"min_value={field.min_value}",
                             row_pct=round(fail / row_count * 100, 1),
@@ -63,7 +63,7 @@ class _QualityCheckMixin:
                 if fail:
                     violations.append(
                         Violation(
-                            kind="value_out_of_range",
+                            kind=ViolationKind.VALUE_OUT_OF_RANGE,
                             column=col_name,
                             constraint=f"max_value={field.max_value}",
                             row_pct=round(fail / row_count * 100, 1),
@@ -80,7 +80,7 @@ class _QualityCheckMixin:
                 if fail:
                     violations.append(
                         Violation(
-                            kind="length_out_of_range",
+                            kind=ViolationKind.LENGTH_OUT_OF_RANGE,
                             column=col_name,
                             constraint=f"min_length={field.min_length}",
                             row_pct=round(fail / row_count * 100, 1),
@@ -97,7 +97,7 @@ class _QualityCheckMixin:
                 if fail:
                     violations.append(
                         Violation(
-                            kind="length_out_of_range",
+                            kind=ViolationKind.LENGTH_OUT_OF_RANGE,
                             column=col_name,
                             constraint=f"max_length={field.max_length}",
                             row_pct=round(fail / row_count * 100, 1),
@@ -109,12 +109,14 @@ class _QualityCheckMixin:
                         return violations
 
             if field.regex is not None:
-                condition = ~F.col(col_name).rlike(field.regex)
+                # rlike matches anywhere in the value; \A...\z anchors it to the whole value
+                # (unlike ^...$, $ would also accept a trailing newline)
+                condition = ~F.col(col_name).rlike(rf"\A(?:{field.regex})\z")
                 fail = df.filter(condition).count()
                 if fail:
                     violations.append(
                         Violation(
-                            kind="regex_mismatch",
+                            kind=ViolationKind.REGEX_MISMATCH,
                             column=col_name,
                             constraint=f"regex={field.regex!r}",
                             row_pct=round(fail / row_count * 100, 1),
@@ -131,7 +133,7 @@ class _QualityCheckMixin:
                 if fail:
                     violations.append(
                         Violation(
-                            kind="value_not_allowed",
+                            kind=ViolationKind.VALUE_NOT_ALLOWED,
                             column=col_name,
                             constraint=f"allowed_values={field.allowed_values}",
                             row_pct=round(fail / row_count * 100, 1),
@@ -157,7 +159,7 @@ class _QualityCheckMixin:
                     ]
                     violations.append(
                         Violation(
-                            kind="duplicate_value",
+                            kind=ViolationKind.DUPLICATE_VALUE,
                             column=col_name,
                             constraint="unique",
                             row_pct=round(fail / row_count * 100, 1),
@@ -174,7 +176,7 @@ class _QualityCheckMixin:
                 if fail:
                     violations.append(
                         Violation(
-                            kind="condition_failed",
+                            kind=ViolationKind.CONDITION_FAILED,
                             column=col_name,
                             constraint=field.condition_description or "condition",
                             row_pct=round(fail / row_count * 100, 1),

@@ -14,8 +14,15 @@ authors = [{ name = "Vinicius Pereira", email = "vp.vinicius.pereira@gmail.com" 
 keywords = ["pyspark", "data-quality", "schema-validation", "etl"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
+    "Typing :: Typed",
 ]
 
 [project.urls]

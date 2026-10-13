@@ -5,11 +5,14 @@ def test_public_imports():
         ContractViolationError,
         Field,
         ValidationDepth,
+        ViolationKind,
         ViolationReport,
         check,
         check_input,
         check_output,
     )
+
+    assert ViolationKind is not None
 
     assert Contract is not None
     assert Field is not None
@@ -26,4 +29,4 @@ def test_version_is_defined():
     import pyspark_contracts
 
     assert hasattr(pyspark_contracts, "__version__")
-    assert pyspark_contracts.__version__ == "0.8.2"
+    assert pyspark_contracts.__version__ == "0.9.0"

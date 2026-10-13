@@ -30,8 +30,10 @@ class Field:
             ``length_out_of_range``.
         max_length: Maximum string length. Longer values produce
             ``length_out_of_range``.
-        regex: A pattern the column's string values must fully match (via
-            ``rlike``). Non-matching values produce ``regex_mismatch``.
+        regex: A pattern each string value must match in full — it's anchored for
+            you, so ``"[0-9]+"`` rejects ``"abc123"`` (no ``^``/``$`` needed). Uses
+            Java regex syntax, as Spark's ``rlike`` does. Non-matching values produce
+            ``regex_mismatch``.
         allowed_values: An allowlist of valid values. Anything else produces
             ``value_not_allowed``.
         condition: A cross-column check anchored to this field. Receives the column

@@ -1,7 +1,7 @@
 from pyspark.sql import DataFrame
 from pyspark.sql.types import DataType
 
-from pyspark_contracts._report import Violation
+from pyspark_contracts._report import Violation, ViolationKind
 
 
 class _SchemaCheckMixin:
@@ -14,16 +14,25 @@ class _SchemaCheckMixin:
 
             if col_name not in actual:
                 violation = Violation(
-                    kind="missing_column",
+                    kind=ViolationKind.MISSING_COLUMN,
                     column=col_name,
-                    expected_type=type(field.dtype).__name__,
+                    expected_type=field.dtype.simpleString(),
                 )
             elif actual[col_name] != field.dtype:
+                expected_type = field.dtype.simpleString()
+                actual_type = actual[col_name].simpleString()
                 violation = Violation(
-                    kind="type_mismatch",
+                    kind=ViolationKind.TYPE_MISMATCH,
                     column=col_name,
-                    expected_type=type(field.dtype).__name__,
-                    actual_type=type(actual[col_name]).__name__,
+                    expected_type=expected_type,
+                    actual_type=actual_type,
+                    # The type strings omit nested nullability and field metadata, so
+                    # two unequal types can still render identically.
+                    constraint=(
+                        "nested nullability or field metadata differs"
+                        if expected_type == actual_type
+                        else None
+                    ),
                 )
 
             if violation is not None:

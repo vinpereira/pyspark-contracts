@@ -7,7 +7,18 @@ on:
 
 jobs:
   test:
+    name: Python ${{ matrix.python }} / PySpark ${{ matrix.pyspark }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest supported PySpark (pyproject: pyspark>=3.3) on the newest Python it supports
+          - { python: "3.10", pyspark: "3.3.*" }
+          - { python: "3.11", pyspark: "3.5.*" }
+          - { python: "3.12", pyspark: "4.0.*" }
+          - { python: "3.13", pyspark: "4.*" }
+          - { python: "3.14", pyspark: "4.*" }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -15,4 +26,26 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: astral-sh/setup-uv@v3
-      - run: uv run pytest tests/ -v
+      - run: uv venv --python ${{ matrix.python }}
+      - run: uv pip install -e . "pyspark==${{ matrix.pyspark }}" pytest
+      - run: .venv/bin/python -m pytest tests/ -v
+
+  test-connect:
+    # Databricks serverless and recent Glue versions run on Spark Connect, where
+    # DataFrame/Column are different classes than in classic PySpark.
+    name: Spark Connect / PySpark 4.x
+    runs-on: ubuntu-latest
+    env:
+      # Makes SparkSession.builder start a local Spark Connect server and hand back a
+      # Connect session, with no change to the test fixtures.
+      SPARK_API_MODE: connect
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: astral-sh/setup-uv@v3
+      - run: uv venv --python 3.12
+      - run: uv pip install -e . "pyspark[connect]==4.*" pytest
+      - run: .venv/bin/python -m pytest tests/ -v

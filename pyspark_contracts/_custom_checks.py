@@ -2,7 +2,7 @@ import inspect
 
 from pyspark.sql import DataFrame
 
-from pyspark_contracts._report import Violation
+from pyspark_contracts._report import Violation, ViolationKind
 
 
 class _CustomCheckMixin:
@@ -30,8 +30,8 @@ class _CustomCheckMixin:
             if fail:
                 violations.append(
                     Violation(
-                        kind="check_failed",
-                        column=check_name,
+                        kind=ViolationKind.CHECK_FAILED,
+                        check=check_name,
                         constraint=method._check_description,
                         row_pct=round(fail / row_count * 100, 1),
                         failure_count=fail,

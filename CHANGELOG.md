@@ -2,6 +2,42 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.0] - 2026-10-12
+
+Last breaking changes before the v1.0.0 API stability guarantee. If you query the
+JSON log output (e.g. in CloudWatch Logs Insights) or match on `regex`, read the
+**Changed** section before upgrading.
+
+### Changed
+- **Breaking:** `regex` must now match the entire value. It used to be passed
+  to `rlike` as-is, which matches anywhere in the value, so `regex="[0-9]+"`
+  accepted `"abc123def"` — despite the docs promising a full match. Patterns
+  already written as `^...$` behave as before.
+- **Breaking:** `expected_type`/`actual_type` on `missing_column`/`type_mismatch`
+  violations are now Spark type strings (`"decimal(26,12)"`, `"array<string>"`,
+  `"float"`) instead of class names (`"DecimalType"`, `"ArrayType"`,
+  `"FloatType"`), so a mismatch in precision or element type is visible. When the
+  two strings still come out identical (the types differ only in nested
+  nullability or field metadata), `constraint` says so.
+- **Breaking:** `check_failed` violations carry the `@check` method name in a new
+  `check` field; `column` is now `None` for them. Log queries filtering
+  `violations.column` to find a check should use `violations.check`.
+- `Violation.kind` is now a `ViolationKind` (exported from `pyspark_contracts`), a
+  `str` enum: comparing to the plain string (`v.kind == "null_violation"`) still
+  works, and `to_dict()`/the JSON log emit the same strings as before.
+  Constructing a `Violation` with an unknown `kind` now raises `ValueError`.
+
+### Added
+- `py.typed` marker, so mypy/pyright use the library's type hints.
+- Package classifiers for Python 3.10–3.14.
+- CI runs the test suite across PySpark 3.3–4.x and Python 3.10–3.14, plus a
+  Spark Connect job.
+
+### Fixed
+- The test suite pins Spark's Python workers to the interpreter running pytest,
+  so a different `python3` first on `PATH` no longer fails every Spark action
+  with `PYTHON_VERSION_MISMATCH`.
+
 ## [0.8.2] - 2026-09-30
 
 ### Fixed

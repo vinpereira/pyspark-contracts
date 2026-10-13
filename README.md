@@ -23,6 +23,8 @@ pip install pyspark-contracts
 PySpark is assumed to be on your classpath (Glue, Databricks, EMR).
 For local development: `pip install pyspark-contracts[pyspark]`
 
+Tested on PySpark 3.3–4.x and Python 3.10–3.14, in both classic mode and Spark Connect.
+
 ## Quick start
 
 ```python
@@ -205,7 +207,7 @@ If no logger is passed, the library emits JSON to stdout.
 | `max_value` | numeric / date | Maximum allowed value. |
 | `min_length` | `int` | Minimum string length. |
 | `max_length` | `int` | Maximum string length. |
-| `regex` | `str` | Regex pattern (must match entire value via `rlike`). |
+| `regex` | `str` | Regex pattern the entire value must match — anchored for you, so `"[0-9]+"` rejects `"abc123"`. |
 | `allowed_values` | `list` | Allowlist of valid values. |
 | `unique` | `bool` | Default `False`. Set `True` to fail when the column has duplicate (non-null) values. |
 
@@ -268,7 +270,7 @@ Both modes emit the same structured JSON before acting:
   "mode": "hard",
   "depth": "schema_and_data",
   "violations": [
-    {"kind": "missing_column", "column": "odometerStart", "expected_type": "FloatType"},
+    {"kind": "missing_column", "column": "odometerStart", "expected_type": "float"},
     {
       "kind": "value_out_of_range",
       "column": "odometerEnd",
@@ -293,21 +295,36 @@ filter message = "contract violation — job aborted"
 filter ispresent(violations)
 | flatten violations
 | stats count(*) by violations.kind, violations.column
+
+-- Failing @check methods across all runs
+filter ispresent(violations)
+| flatten violations
+| filter violations.kind = "check_failed"
+| stats count(*) by contract, violations.check
 ```
 
 ## Violation kinds
 
+Each violation's `kind` is a `ViolationKind` member. It's a `str` enum, so comparing it to
+the plain string still works:
+
+```python
+from pyspark_contracts import ViolationKind
+
+nulls = [v for v in report.violations if v.kind == ViolationKind.NULL_VIOLATION]
+```
+
 | Kind | Trigger |
 |------|---------|
 | `missing_column` | Column declared in contract is absent from the DataFrame |
-| `type_mismatch` | Column exists but type differs from declared type |
+| `type_mismatch` | Column exists but type differs from declared type (reported as Spark type strings, e.g. `decimal(26,12)`) |
 | `null_violation` | `nullable=False` column contains null values |
 | `value_out_of_range` | Value below `min_value` or above `max_value` |
 | `length_out_of_range` | String length below `min_length` or above `max_length` |
 | `regex_mismatch` | Value does not match `regex` pattern |
 | `value_not_allowed` | Value not in `allowed_values` list |
 | `condition_failed` | `Field(condition=...)` expression evaluated to false |
-| `check_failed` | `@check`-decorated method returned non-empty failing rows |
+| `check_failed` | `@check`-decorated method returned non-empty failing rows (named in `check`, not `column`) |
 | `duplicate_value` | `Field(unique=True)` column has repeated (non-null) values |
 | `row_count_out_of_range` | DataFrame row count below `min_rows` or above `max_rows` |
 

@@ -99,6 +99,30 @@ def test_no_regex_violation_when_all_match(spark):
     assert not report
 
 
+def test_regex_must_match_the_whole_value(spark):
+    class MyContract(Contract):
+        code = Field(StringType(), regex=r"[0-9]+")
+
+    schema = StructType([StructField("code", StringType())])
+    df = spark.createDataFrame([("123",), ("abc123def",), ("123\n",)], schema)
+    report = MyContract().validate(df, mode="soft")
+    assert len(report.violations) == 1
+    assert report.violations[0].failure_count == 2
+    assert sorted(report.violations[0].sample_values) == ["123\n", "abc123def"]
+    assert report.violations[0].constraint == "regex='[0-9]+'"
+
+
+def test_regex_alternation_is_anchored_as_a_whole(spark):
+    class MyContract(Contract):
+        status = Field(StringType(), regex=r"open|closed")
+
+    schema = StructType([StructField("status", StringType())])
+    df = spark.createDataFrame([("open",), ("closed",), ("reopened",), ("open-ish",)], schema)
+    report = MyContract().validate(df, mode="soft")
+    assert len(report.violations) == 1
+    assert sorted(report.violations[0].sample_values) == ["open-ish", "reopened"]
+
+
 def test_allowed_values_violation(spark):
     class MyContract(Contract):
         status = Field(StringType(), allowed_values=["active", "inactive"])
