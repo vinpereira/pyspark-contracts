@@ -330,10 +330,23 @@ nulls = [v for v in report.violations if v.kind == ViolationKind.NULL_VIOLATION]
 
 ## Performance note
 
-Each quality constraint triggers a Spark action (`filter + count`).
-For DataFrames with many constraints, consider caching before validation:
+The row count and every column constraint (`nullable`, ranges, lengths, `regex`,
+`allowed_values`, `condition`) are checked together in a single Spark action, however many
+the contract declares. On top of that:
+
+| Adds one Spark action each | Why |
+|---|---|
+| `unique` field | Needs a `groupBy`, which can't share the single pass |
+| `@check` method | Counts the rows it returns |
+| Violation found | Fetches its `sample_values` |
+
+So a contract without `unique` or `@check` reads a passing DataFrame once. If yours has
+several of them, or you expect violations, and the DataFrame is expensive to recompute,
+cache it before validating:
 
 ```python
 df = df.cache()
 OdometerContract().validate(df)
 ```
+
+See [BENCHMARKS.md](https://github.com/vinpereira/pyspark-contracts/blob/main/BENCHMARKS.md) for measured overhead.
