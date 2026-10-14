@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.10.0] - 2026-10-14
+
+### Changed
+- `validate()` checks the row count and every column constraint (`nullable`, ranges,
+  lengths, `regex`, `allowed_values`, `condition`) in a single Spark action, instead of
+  a `df.count()` plus one `filter().count()` per constraint. A passing validation's cost
+  no longer grows with the number of column constraints: the benchmark contract goes
+  from 16 actions to 3 (30 Spark jobs to 6), and from 0.73s to 0.29s on a cached
+  1M-row DataFrame. `unique` (needs a `groupBy`) and each `@check` are still one action
+  each, and a violation still costs one more to fetch its `sample_values`. Reports are
+  unchanged: same violations, order, counts, and samples.
+- In fail-fast mode, a `unique` field's `groupBy` no longer runs when an earlier
+  constraint already failed.
+
+### Added
+- `benchmarks/benchmark_validate.py` reports the Spark jobs each scenario launches.
+
 ## [0.9.0] - 2026-10-12
 
 Last breaking changes before the v1.0.0 API stability guarantee. If you query the

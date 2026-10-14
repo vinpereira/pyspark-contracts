@@ -10,6 +10,7 @@ Run: uv run python benchmarks/benchmark_validate.py
 
 import statistics
 import time
+import uuid
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -65,15 +66,25 @@ def build_dataframe(spark, n):
     )
 
 
-def time_it(label, fn):
-    fn()  # warmup — primes Catalyst whole-stage codegen so it isn't billed to the first repeat
+def count_jobs(spark, fn):
+    """Number of Spark jobs one call of ``fn`` launches."""
+    group = f"benchmark-{uuid.uuid4().hex}"
+    spark.sparkContext.setJobGroup(group, group)
+    fn()
+    return len(spark.sparkContext.statusTracker().getJobIdsForGroup(group))
+
+
+def time_it(spark, label, fn):
+    jobs = count_jobs(spark, fn)  # also the warmup: primes Catalyst whole-stage codegen
     times = []
     for _ in range(REPEATS):
         start = time.perf_counter()
         fn()
         times.append(time.perf_counter() - start)
     formatted = ", ".join(f"{t:.2f}s" for t in times)
-    print(f"{label:<42} median={statistics.median(times):6.2f}s   runs=[{formatted}]")
+    print(
+        f"{label:<42} median={statistics.median(times):6.2f}s   jobs={jobs:<3} runs=[{formatted}]"
+    )
 
 
 def main():
@@ -94,20 +105,23 @@ def main():
         f"min_rows={OdometerReadingContract.min_rows}\n"
     )
 
-    time_it("Baseline: df.count() only", lambda: df.count())
+    time_it(spark, "Baseline: df.count() only", lambda: df.count())
     time_it(
+        spark,
         "validate(depth=SCHEMA_ONLY)",
         lambda: OdometerReadingContract().validate(
             df, mode="soft", depth=ValidationDepth.SCHEMA_ONLY
         ),
     )
     time_it(
+        spark,
         "validate(depth=DATA_ONLY)",
         lambda: OdometerReadingContract().validate(
             df, mode="soft", depth=ValidationDepth.DATA_ONLY
         ),
     )
     time_it(
+        spark,
         "validate(depth=SCHEMA_AND_DATA, default)",
         lambda: OdometerReadingContract().validate(df, mode="soft"),
     )
