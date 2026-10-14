@@ -53,9 +53,9 @@ class Field:
             affects validation; surfaced by ``to_dict()``/``describe()``.
         unique: Whether this column's non-null values must all be distinct. Set
             ``True`` to produce ``duplicate_value`` when any value repeats. Costlier
-            than the other constraints (needs a ``groupBy``, not a plain
-            ``filter().count()``); null values are never considered duplicates of
-            each other.
+            than the other constraints: it needs a ``groupBy``, so it runs as its own
+            Spark action instead of sharing the single pass that checks the others.
+            Null values are never considered duplicates of each other.
     """
 
     def __init__(

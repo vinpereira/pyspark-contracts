@@ -37,6 +37,10 @@ class _ValidationMixin:
         methods — each stage gated by ``depth`` and, in fail-fast mode, by whether an
         earlier stage already found a violation.
 
+        The row count and every per-field constraint except ``unique`` are computed in
+        a single Spark action. Each ``unique`` field and each ``@check`` adds one more,
+        and so does each violation found (to fetch its ``sample_values``).
+
         Args:
             df: The DataFrame to validate.
             mode: ``"hard"`` (default) logs at ``ERROR`` and raises
@@ -91,17 +95,15 @@ class _ValidationMixin:
         if depth in (ValidationDepth.DATA_ONLY, ValidationDepth.SCHEMA_AND_DATA) and (
             lazy or not violations
         ):
-            row_count = df.count()
+            rules = self._row_rules(
+                skip_columns={v.column for v in violations},
+                blocks_cross_column=blocks_cross_column,
+            )
+            # One Spark action for the row count and every row-level constraint at once
+            row_count, fail_counts = self._count_rows_and_failures(df, rules)
             violations += self._check_dataset(row_count, lazy=lazy)
             if row_count > 0 and (lazy or not violations):
-                violated_columns = {v.column for v in violations}
-                violations += self._check_quality(
-                    df,
-                    row_count,
-                    skip_columns=violated_columns,
-                    lazy=lazy,
-                    blocks_cross_column=blocks_cross_column,
-                )
+                violations += self._check_quality(df, row_count, rules, fail_counts, lazy=lazy)
             if row_count > 0 and not blocks_cross_column and (lazy or not violations):
                 violations += self._check_custom(df, row_count, lazy=lazy, **kwargs)
 
