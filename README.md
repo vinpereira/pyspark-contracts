@@ -9,7 +9,8 @@
 
 Lightweight schema and data quality validation for PySpark DataFrames.
 
-Full documentation: [pyspark-contracts.readthedocs.io](https://pyspark-contracts.readthedocs.io/)
+Full documentation: [pyspark-contracts.readthedocs.io](https://pyspark-contracts.readthedocs.io/) ·
+What's next: [ROADMAP.md](https://github.com/vinpereira/pyspark-contracts/blob/main/ROADMAP.md)
 
 Validates at runtime — before your pipeline runs — with a structured JSON report
 queryable in CloudWatch Logs Insights, Datadog, or any log aggregator.
@@ -45,6 +46,25 @@ report = OdometerContract().validate(df, mode="soft")
 if report:
     print(f"{len(report.violations)} violation(s) found")
 ```
+
+## Why pyspark-contracts
+
+A contract is a Python class that lives next to the pipeline code, gets enforced on the
+DataFrames going into and out of your functions, and reports failures as structured JSON in
+the logs you already have. The library has no dependencies besides PySpark itself.
+
+It does less than the data quality frameworks below, on purpose. Pick by what you need:
+
+| Tool | Pick it when |
+|------|--------------|
+| **pyspark-contracts** | You want schema and row-level rules as code, checked at function boundaries in PySpark jobs, with nothing extra to install or run. |
+| [Pandera](https://pandera.readthedocs.io/) | You also validate pandas or polars DataFrames, or need statistical and hypothesis checks. |
+| [Great Expectations](https://greatexpectations.io/) | You want a data quality platform: expectation suites managed as configuration, Data Docs reports, and checkpoints across many datasets. |
+| [PyDeequ](https://github.com/awslabs/python-deequ) | You want metrics tracked over time, anomaly detection, or suggested constraints, and can put the Deequ JAR matching your Spark version on the classpath. |
+| [AWS Glue Data Quality](https://docs.aws.amazon.com/glue/latest/dg/glue-data-quality.html) | You run on AWS Glue and want managed rulesets with CloudWatch metrics and console integration. It complements contracts rather than replacing them; you can use both. |
+
+What the library deliberately won't do is listed under *Non-goals* in the
+[roadmap](https://github.com/vinpereira/pyspark-contracts/blob/main/ROADMAP.md).
 
 ## Validation modes
 
