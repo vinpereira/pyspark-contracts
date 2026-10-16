@@ -1,7 +1,7 @@
 # Integration Guide
 
 How to bring `pyspark-contracts` into AWS Glue, Databricks, and a local pytest suite. This
-assumes you're already familiar with the core API — see the [README](README.md) for that.
+assumes you're already familiar with the core API — see the [README](https://github.com/vinpereira/pyspark-contracts/blob/main/README.md) for that.
 
 ## AWS Glue
 
@@ -60,7 +60,7 @@ AssetHdrTelemetryReadingContract().validate(df)
 ### Toggling validation per job run
 
 Glue job parameters are the natural place to control the library's
-[global toggle](README.md#disabling-validation) — e.g. to skip validation on a reprocessing
+[global toggle](https://github.com/vinpereira/pyspark-contracts/blob/main/README.md#disabling-validation) — e.g. to skip validation on a reprocessing
 run of data you already validated once:
 
 ```python
@@ -139,7 +139,7 @@ report = OdometerContract().validate(df, mode=mode)
 ### Multi-task Workflows
 
 For a job with several tasks feeding into each other, `@check_input`/`@check_output`
-(see the [README](README.md#validating-pipeline-functions)) keep the contract attached to
+(see the [README](https://github.com/vinpereira/pyspark-contracts/blob/main/README.md#validating-pipeline-functions)) keep the contract attached to
 each task's transform function instead of relying on every task remembering to call
 `validate()`:
 

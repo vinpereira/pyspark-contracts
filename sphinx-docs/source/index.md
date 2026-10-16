@@ -8,5 +8,6 @@
 api
 integration
 benchmarks
+roadmap
 changelog
 ```
