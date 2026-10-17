@@ -2,6 +2,46 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.11.0] - 2026-10-17
+
+Last feature release before v1.0.0. With default settings, existing contracts behave as
+before except for the two **Changed** items, and every violation in `to_dict()`/the JSON
+log gains a `"severity"` key.
+
+### Added
+- **Severity and tolerance.** `Field(severity="warn")` and `@check(..., severity="warn")`
+  make a rule's violations warnings: reported and logged, but `mode="hard"` doesn't raise
+  for them (with only warnings it logs `WARNING` and returns the report).
+  `Field(max_failure_pct=...)` turns a constraint failing on at most that percentage of
+  rows into a warning instead of an error. Structural and `row_count_out_of_range`
+  violations are always errors. New `Severity` enum, `Violation.severity`, and
+  `ViolationReport.errors`/`.warnings`. Both settings round-trip through
+  `to_dict()`/`ContractSchema` and show in `describe()`.
+- **Strict contracts.** `strict = True` on a contract reports every DataFrame column it
+  doesn't declare as a new `unexpected_column` violation. Schema-only (no Spark action),
+  inherited by subclasses, round-trips through `to_dict()`/`ContractSchema`.
+- `Contract.to_struct_type()` returns the `StructType` a contract declares (field
+  `description` becomes the column `comment`), to use as a read schema;
+  `Contract.empty_df(spark)` returns an empty DataFrame with it, for tests. Both are also
+  on `ContractSchema`.
+
+### Changed
+- Type checks ignore the metadata of fields nested inside a `StructType` (including in
+  arrays and maps). A struct read from a table with column comments no longer fails as a
+  `type_mismatch` against a contract declaring the same fields. The `constraint` text for
+  a `type_mismatch` whose type strings are identical is now
+  `"nested nullability differs"`.
+- In fail-fast mode (`lazy=False`, the default in `mode="hard"`), validation stops at the
+  first error rather than the first violation, keeping any warnings found before it. With
+  no warning-level rules this is the same as before.
+- `Violation` has a new `severity` field right after `kind`; code constructing a
+  `Violation` with positional arguments past `kind` must switch to keywords.
+- `ContractViolationError`'s message reads `"<Contract> — N error(s), M warning(s) — job
+  aborted"` when warnings are present (unchanged otherwise).
+
+### Fixed
+- In-page links in the README (e.g. to a section) resolve on the documentation site too.
+
 ## [0.10.0] - 2026-10-14
 
 ### Changed

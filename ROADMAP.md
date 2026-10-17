@@ -3,33 +3,12 @@
 What's planned for pyspark-contracts, and what's deliberately out of scope. Plans can change;
 once something ships it moves from here to the [CHANGELOG](https://github.com/vinpereira/pyspark-contracts/blob/main/CHANGELOG.md).
 
-## Next: v0.11.0
+## Next: v1.0.0 — Stable API
 
-Contract features that real pipelines keep needing.
-
-- **Strict contracts** — a `strict = True` class attribute that flags columns present in the
-  DataFrame but not declared on the contract (`unexpected_column`). Off by default. Useful for
-  output contracts, right before writing to a table.
-- **Reuse the declaration** — `Contract.to_struct_type()` to read data with the contract as
-  its schema (`spark.read.schema(MyContract.to_struct_type())`), and `Contract.empty_df(spark)`
-  as a test fixture.
-- **Severity and tolerance** — every violation gets a `severity` (`"error"` or `"warn"`):
-  - `Field(severity="warn")` / `@check(..., severity="warn")` makes a rule's violations
-    warnings.
-  - `Field(max_failure_pct=0.5)` turns failures within that share of rows into warnings — still
-    reported, so drift stays visible.
-  - `mode="hard"` raises only when there's at least one error; `report.errors` and
-    `report.warnings` split the two.
-  - Structural (`missing_column`, `type_mismatch`) and row-count violations are always errors.
-- **Nested type comparison ignores field metadata** — a `StructType` column whose fields
-  differ from the contract only in metadata (documentation) is no longer a `type_mismatch`.
-
-## v1.0.0 — Stable API
-
-Once v0.11.0 lands, v1.0.0 commits to the public API — `Contract`, `Field`, `@check`,
-`@check_input`, `@check_output`, `ValidationDepth`, `ContractSchema`, `ViolationReport`,
-`ViolationKind`, `ContractViolationError`, and the JSON log format: no breaking changes without
-a major version bump.
+v1.0.0 commits to the public API — `Contract`, `Field`, `@check`, `@check_input`,
+`@check_output`, `ValidationDepth`, `ContractSchema`, `ViolationReport`,
+`ViolationKind`, `Severity`, `ContractViolationError`, and the JSON log format: no breaking
+changes without a major version bump.
 
 ## Ideas, not scheduled
 
