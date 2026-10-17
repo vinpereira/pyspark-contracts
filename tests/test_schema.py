@@ -4,6 +4,8 @@ from pyspark.sql.types import (
     DecimalType,
     FloatType,
     IntegerType,
+    LongType,
+    MapType,
     StringType,
     StructField,
     StructType,
@@ -136,7 +138,38 @@ def test_type_mismatch_flags_difference_hidden_by_type_string(spark):
     violation = MyContract().validate(df, mode="soft").violations[0]
     assert violation.kind == "type_mismatch"
     assert violation.expected_type == violation.actual_type == "array<string>"
-    assert violation.constraint == "nested nullability or field metadata differs"
+    assert violation.constraint == "nested nullability differs"
+
+
+@pytest.mark.parametrize(
+    "wrap",
+    [
+        pytest.param(lambda t: t, id="struct"),
+        pytest.param(lambda t: ArrayType(t), id="array-of-struct"),
+        pytest.param(lambda t: MapType(StringType(), t), id="map-of-struct"),
+    ],
+)
+def test_type_check_ignores_nested_field_metadata(spark, wrap):
+    def struct(metadata):
+        return StructType([StructField("km", IntegerType(), True, metadata)])
+
+    class MyContract(Contract):
+        reading = Field(wrap(struct({"comment": "odometer, in km"})))
+
+    schema = StructType([StructField("reading", wrap(struct({})))])
+    report = MyContract().validate(spark.createDataFrame([], schema), mode="soft")
+    assert not report
+
+
+def test_type_check_still_catches_nested_type_difference(spark):
+    class MyContract(Contract):
+        reading = Field(StructType([StructField("km", IntegerType(), True, {"unit": "km"})]))
+
+    schema = StructType([StructField("reading", StructType([StructField("km", LongType())]))])
+    violation = MyContract().validate(spark.createDataFrame([], schema), mode="soft").violations[0]
+    assert violation.kind == "type_mismatch"
+    assert violation.expected_type == "struct<km:int>"
+    assert violation.actual_type == "struct<km:bigint>"
 
 
 def test_validate_hard_fail_raises_contract_violation_error(spark):

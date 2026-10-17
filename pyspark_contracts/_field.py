@@ -19,7 +19,9 @@ class Field:
     Args:
         dtype: The expected Spark ``DataType`` for this column (e.g. ``StringType()``,
             ``DecimalType(26, 12)``). Compared against the DataFrame's actual schema;
-            a mismatch produces a ``type_mismatch`` violation.
+            a mismatch produces a ``type_mismatch`` violation. The metadata of fields
+            nested inside a ``StructType`` (comments, units, ...) is ignored, since it's
+            documentation rather than part of the data's shape.
         nullable: Whether the column may contain null values. Defaults to ``True``.
             Set ``False`` to produce a ``null_violation`` when any row is null.
         min_value: Minimum allowed value (numeric or date/timestamp types). Values

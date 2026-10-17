@@ -54,7 +54,7 @@ class Violation:
             failed (e.g. ``"min_value=0"``, ``"nullable"``, a ``condition``'s or
             ``@check``'s description text). For a ``type_mismatch`` whose two type
             strings are identical, explains that the difference is in nested
-            nullability or field metadata, which type strings don't show.
+            nullability, which type strings don't show.
         row_pct: Percentage of rows that failed this constraint. Not set for
             structural (``missing_column``/``type_mismatch``) or dataset-level
             (``row_count_out_of_range``) violations, which aren't about a subset of

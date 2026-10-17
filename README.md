@@ -337,7 +337,7 @@ nulls = [v for v in report.violations if v.kind == ViolationKind.NULL_VIOLATION]
 | Kind | Trigger |
 |------|---------|
 | `missing_column` | Column declared in contract is absent from the DataFrame |
-| `type_mismatch` | Column exists but type differs from declared type (reported as Spark type strings, e.g. `decimal(26,12)`) |
+| `type_mismatch` | Column exists but type differs from declared type (reported as Spark type strings, e.g. `decimal(26,12)`). Metadata on nested struct fields is ignored. |
 | `null_violation` | `nullable=False` column contains null values |
 | `value_out_of_range` | Value below `min_value` or above `max_value` |
 | `length_out_of_range` | String length below `min_length` or above `max_length` |
