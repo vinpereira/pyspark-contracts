@@ -2,12 +2,16 @@ import json
 import warnings
 from collections.abc import Callable
 
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql.types import StructType
+
 from pyspark_contracts._custom_checks import _CustomCheckMixin
 from pyspark_contracts._dataset_checks import _DatasetCheckMixin
 from pyspark_contracts._dtype_json import dtype_from_json
 from pyspark_contracts._field import Field
 from pyspark_contracts._quality_checks import _QualityCheckMixin
 from pyspark_contracts._schema_checks import _SchemaCheckMixin
+from pyspark_contracts._struct_type import fields_to_struct_type
 from pyspark_contracts._validation import _ValidationMixin
 
 
@@ -48,6 +52,16 @@ class ContractSchema(
 
     def _report_name(self) -> str:
         return self._name
+
+    def to_struct_type(self) -> StructType:
+        """The Spark schema the original contract declared — see
+        :meth:`.Contract.to_struct_type`.
+        """
+        return fields_to_struct_type(self._fields)
+
+    def empty_df(self, spark: SparkSession) -> DataFrame:
+        """An empty DataFrame with this schema — see :meth:`.Contract.empty_df`."""
+        return spark.createDataFrame([], self.to_struct_type())
 
     @classmethod
     def from_dict(cls, schema_dict: dict) -> "ContractSchema":

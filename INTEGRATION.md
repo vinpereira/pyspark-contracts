@@ -219,3 +219,29 @@ def test_odometer_contract_rejects_negative_values(spark):
 assert against, instead of raising `ContractViolationError` (which you'd otherwise have to
 wrap in `pytest.raises` for every single test, including the ones checking that valid data
 passes).
+
+### Building test DataFrames from the contract
+
+Instead of writing the `StructType` again in every test, build it from the contract with
+`to_struct_type()`, so a column renamed in the contract can't drift from the test data:
+
+```python
+from datetime import date
+
+from my_project.contracts import OdometerContract  # vin, odometerStart, odometerEnd, readingDate
+
+
+def test_odometer_contract_rejects_negative_values(spark):
+    row = ("1HGCM82633A004352", -1.0, 10.0, date(2026, 1, 1))
+    df = spark.createDataFrame([row], OdometerContract.to_struct_type())
+
+    report = OdometerContract().validate(df, mode="soft")
+
+    assert report.violations[0].kind == "value_out_of_range"
+
+
+def test_build_final_df_handles_no_input(spark):
+    result = build_final_df(OdometerContract.empty_df(spark))
+    assert result.count() == 0
+```
+

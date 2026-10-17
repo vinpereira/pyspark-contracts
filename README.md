@@ -296,6 +296,28 @@ and every quality constraint. It cannot reconstruct `@check` methods or `conditi
 (arbitrary Python code was never serialized) — `from_dict()`/`from_json()` emit a warning
 naming any such rules the original contract had, so you know they won't be enforced.
 
+## Reusing the contract as a Spark schema
+
+`to_struct_type()` returns the `StructType` the contract declares, so the same declaration can
+drive the read:
+
+```python
+df = spark.read.schema(OdometerContract.to_struct_type()).parquet(path)
+OdometerContract().validate(df)
+```
+
+Each field's `nullable` carries over, and its `description` becomes the column's `comment`
+metadata (the column comment when the DataFrame is saved as a table). Spark relaxes
+`nullable=False` to `True` when reading files, so `validate()` is still what enforces it.
+
+`empty_df(spark)` gives you an empty DataFrame with that schema, for tests:
+
+```python
+df = OdometerContract.empty_df(spark)
+```
+
+Both also work on a `ContractSchema` reloaded with `from_dict()`/`from_json()`.
+
 ## Log output
 
 Both modes emit the same structured JSON before acting:
