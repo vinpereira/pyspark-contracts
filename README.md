@@ -73,19 +73,66 @@ What the library deliberately won't do is listed under *Non-goals* in the
 | `"hard"` (default) | Logs `ERROR` (JSON), raises `ContractViolationError` | — |
 | `"soft"` | Logs `WARNING` (JSON), continues | `ViolationReport` |
 
+Violations are errors by default. A rule marked as a warning (see
+[Severity and tolerance](#severity-and-tolerance)) never raises: if every violation is a
+warning, `"hard"` mode logs `WARNING` and returns the report too.
+
 ## Lazy vs fail-fast
 
-By default, `"hard"` mode stops at the first violation found (fewer Spark actions,
-faster feedback), while `"soft"` mode collects every violation so you get the full
-picture in one run. Override either with `lazy`:
+By default, `"hard"` mode stops at the first error found (fewer Spark actions, faster
+feedback), while `"soft"` mode collects every violation so you get the full picture in one
+run. Warnings found before that first error are kept — stopping at a warning could hide an
+error that should abort the job. Override either default with `lazy`:
 
 ```python
 # Hard mode, but collect every violation before raising
 OdometerContract().validate(df, lazy=True)
 
-# Soft mode, but stop at the first violation
+# Soft mode, but stop at the first error
 report = OdometerContract().validate(df, mode="soft", lazy=False)
 ```
+
+## Severity and tolerance
+
+Every violation has a `severity`: `"error"` (the default) or `"warn"`. Warnings are reported
+and logged like errors, but never make `"hard"` mode raise — useful for a signal you want to
+watch without aborting the job, or a rule that tolerates a little noise:
+
+```python
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.types import DateType, StringType
+from pyspark_contracts import Contract, Field, check
+
+class OdometerContract(Contract):
+    vin = Field(StringType(), nullable=False, regex="[A-Z0-9]{17}")
+
+    # Up to 0.1% null readings is a warning; more than that is an error
+    readingDate = Field(DateType(), nullable=False, max_failure_pct=0.1)
+
+    # Never more than a warning
+    note = Field(StringType(), max_length=200, severity="warn")
+
+    @check("delta_km should be under a plausible daily max", severity="warn")
+    def plausible_delta(self, df: DataFrame) -> DataFrame:
+        return df.filter(F.col("odometerEnd") - F.col("odometerStart") > 2000)
+```
+
+- `severity` on a `Field` applies to all of its data constraints; on `@check`, to that check.
+- `max_failure_pct` is a share of rows (0–100, like `row_pct`): a constraint failing on at most
+  that share is a warning instead of an error. It's compared against the exact share, so
+  `row_pct`'s rounding can't flip it.
+- Structural violations (`missing_column`, `type_mismatch`, `unexpected_column`) and
+  `row_count_out_of_range` are always errors.
+
+```python
+report = OdometerContract().validate(df)   # raises only if report.errors would be non-empty
+for v in report.warnings:
+    print(v.kind, v.column or v.check, v.row_pct)
+```
+
+`if report:` is still true when there are only warnings; use `report.errors` /
+`report.warnings` to tell them apart.
 
 ## Cross-column checks
 
@@ -199,6 +246,24 @@ Checked right after the row count is known, so they apply under `DATA_ONLY` and
 `@check`/`condition`, `min_rows`/`max_rows` are plain data, so they round-trip through
 `to_dict()`/`ContractSchema` with no "can't reconstruct" warning.
 
+## Strict contracts
+
+By default a DataFrame may carry columns the contract doesn't declare. Set `strict = True` to
+report each of them as an `unexpected_column` violation — useful for an output contract right
+before writing to a table, where a leftover debug or join column shouldn't slip through:
+
+```python
+class FinalTableContract(Contract):
+    strict = True
+    vin = Field(StringType(), nullable=False)
+    odometer = Field(FloatType())
+```
+
+It's a structural check like `missing_column`: it reads only `df.schema`, so it runs under
+`SCHEMA_ONLY` and `SCHEMA_AND_DATA` (not `DATA_ONLY`) with no Spark action, and it round-trips
+through `to_dict()`/`ContractSchema`. Unexpected columns don't stop `condition` or `@check`
+from running, since every column they could reference is still there.
+
 ## Disabling validation
 
 ```bash
@@ -230,6 +295,8 @@ If no logger is passed, the library emits JSON to stdout.
 | `regex` | `str` | Regex pattern the entire value must match — anchored for you, so `"[0-9]+"` rejects `"abc123"`. |
 | `allowed_values` | `list` | Allowlist of valid values. |
 | `unique` | `bool` | Default `False`. Set `True` to fail when the column has duplicate (non-null) values. |
+| `severity` | `str` | `"error"` (default) or `"warn"`, for every data constraint on the field. |
+| `max_failure_pct` | `float` | Percentage of rows (0–100) a constraint may fail on and still be only a warning. |
 
 ## Documenting a contract
 
@@ -278,6 +345,28 @@ and every quality constraint. It cannot reconstruct `@check` methods or `conditi
 (arbitrary Python code was never serialized) — `from_dict()`/`from_json()` emit a warning
 naming any such rules the original contract had, so you know they won't be enforced.
 
+## Reusing the contract as a Spark schema
+
+`to_struct_type()` returns the `StructType` the contract declares, so the same declaration can
+drive the read:
+
+```python
+df = spark.read.schema(OdometerContract.to_struct_type()).parquet(path)
+OdometerContract().validate(df)
+```
+
+Each field's `nullable` carries over, and its `description` becomes the column's `comment`
+metadata (the column comment when the DataFrame is saved as a table). Spark relaxes
+`nullable=False` to `True` when reading files, so `validate()` is still what enforces it.
+
+`empty_df(spark)` gives you an empty DataFrame with that schema, for tests:
+
+```python
+df = OdometerContract.empty_df(spark)
+```
+
+Both also work on a `ContractSchema` reloaded with `from_dict()`/`from_json()`.
+
 ## Log output
 
 Both modes emit the same structured JSON before acting:
@@ -290,9 +379,10 @@ Both modes emit the same structured JSON before acting:
   "mode": "hard",
   "depth": "schema_and_data",
   "violations": [
-    {"kind": "missing_column", "column": "odometerStart", "expected_type": "float"},
+    {"kind": "missing_column", "severity": "error", "column": "odometerStart", "expected_type": "float"},
     {
       "kind": "value_out_of_range",
+      "severity": "error",
       "column": "odometerEnd",
       "constraint": "min_value=0",
       "row_pct": 2.3,
@@ -316,6 +406,12 @@ filter ispresent(violations)
 | flatten violations
 | stats count(*) by violations.kind, violations.column
 
+-- Errors only, ignoring warnings
+filter ispresent(violations)
+| flatten violations
+| filter violations.severity = "error"
+| stats count(*) by contract, violations.kind
+
 -- Failing @check methods across all runs
 filter ispresent(violations)
 | flatten violations
@@ -337,7 +433,7 @@ nulls = [v for v in report.violations if v.kind == ViolationKind.NULL_VIOLATION]
 | Kind | Trigger |
 |------|---------|
 | `missing_column` | Column declared in contract is absent from the DataFrame |
-| `type_mismatch` | Column exists but type differs from declared type (reported as Spark type strings, e.g. `decimal(26,12)`) |
+| `type_mismatch` | Column exists but type differs from declared type (reported as Spark type strings, e.g. `decimal(26,12)`). Metadata on nested struct fields is ignored. |
 | `null_violation` | `nullable=False` column contains null values |
 | `value_out_of_range` | Value below `min_value` or above `max_value` |
 | `length_out_of_range` | String length below `min_length` or above `max_length` |
@@ -347,6 +443,7 @@ nulls = [v for v in report.violations if v.kind == ViolationKind.NULL_VIOLATION]
 | `check_failed` | `@check`-decorated method returned non-empty failing rows (named in `check`, not `column`) |
 | `duplicate_value` | `Field(unique=True)` column has repeated (non-null) values |
 | `row_count_out_of_range` | DataFrame row count below `min_rows` or above `max_rows` |
+| `unexpected_column` | `strict = True` contract, and the DataFrame has a column it doesn't declare |
 
 ## Performance note
 

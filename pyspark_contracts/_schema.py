@@ -2,12 +2,16 @@ import json
 import warnings
 from collections.abc import Callable
 
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql.types import StructType
+
 from pyspark_contracts._custom_checks import _CustomCheckMixin
 from pyspark_contracts._dataset_checks import _DatasetCheckMixin
 from pyspark_contracts._dtype_json import dtype_from_json
 from pyspark_contracts._field import Field
 from pyspark_contracts._quality_checks import _QualityCheckMixin
 from pyspark_contracts._schema_checks import _SchemaCheckMixin
+from pyspark_contracts._struct_type import fields_to_struct_type
 from pyspark_contracts._validation import _ValidationMixin
 
 
@@ -18,7 +22,8 @@ class ContractSchema(
     :class:`.Contract` subclass.
 
     Reconstructs everything :meth:`.Contract.to_dict` captured as data — types,
-    nullability, and every quality constraint (including ``min_rows``/``max_rows``) —
+    nullability, and every quality constraint (including ``min_rows``/``max_rows``
+    and ``strict``) —
     and shares the exact same ``validate()`` implementation ``Contract`` uses, so a
     reloaded schema enforces the same rules the original class did. It cannot
     reconstruct ``@check`` methods or ``Field(condition=...)`` lambdas, since those are
@@ -36,15 +41,27 @@ class ContractSchema(
         fields: dict[str, Field],
         min_rows: int | None = None,
         max_rows: int | None = None,
+        strict: bool = False,
     ) -> None:
         self._name = contract_name
         self._fields = fields
         self._checks: dict[str, Callable] = {}
         self.min_rows = min_rows
         self.max_rows = max_rows
+        self.strict = strict
 
     def _report_name(self) -> str:
         return self._name
+
+    def to_struct_type(self) -> StructType:
+        """The Spark schema the original contract declared — see
+        :meth:`.Contract.to_struct_type`.
+        """
+        return fields_to_struct_type(self._fields)
+
+    def empty_df(self, spark: SparkSession) -> DataFrame:
+        """An empty DataFrame with this schema — see :meth:`.Contract.empty_df`."""
+        return spark.createDataFrame([], self.to_struct_type())
 
     @classmethod
     def from_dict(cls, schema_dict: dict) -> "ContractSchema":
@@ -83,6 +100,8 @@ class ContractSchema(
                 description=entry.get("description"),
                 metadata=entry.get("metadata"),
                 unique=entry.get("unique", False),
+                severity=entry.get("severity", "error"),
+                max_failure_pct=entry.get("max_failure_pct"),
             )
 
         unenforceable = list(schema_dict.get("checks", {}).keys())
@@ -104,6 +123,7 @@ class ContractSchema(
             fields,
             min_rows=schema_dict.get("min_rows"),
             max_rows=schema_dict.get("max_rows"),
+            strict=schema_dict.get("strict", False),
         )
 
     @classmethod

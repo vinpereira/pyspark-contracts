@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pyspark.sql import Column, DataFrame
 from pyspark.sql import functions as F
 
-from pyspark_contracts._report import Violation, ViolationKind
+from pyspark_contracts._report import Severity, Violation, ViolationKind
 
 
 @dataclass
@@ -18,6 +18,15 @@ class _RowRule:
     column: str
     constraint: str
     fail: Column | None = None
+    severity: Severity = Severity.ERROR
+    max_failure_pct: float | None = None
+
+    def severity_for(self, fail: int, row_count: int) -> Severity:
+        """This rule's severity for ``fail`` failing rows out of ``row_count``: a warning
+        when within ``max_failure_pct`` (compared unrounded), else its own severity."""
+        if self.max_failure_pct is not None and fail / row_count * 100 <= self.max_failure_pct:
+            return Severity.WARN
+        return self.severity
 
 
 class _QualityCheckMixin:
@@ -38,6 +47,7 @@ class _QualityCheckMixin:
             if col_name in skip_columns or not field._has_quality_constraints():
                 continue
             col = F.col(col_name)
+            first_rule = len(rules)
 
             if not field.nullable:
                 rules.append(
@@ -111,6 +121,10 @@ class _QualityCheckMixin:
                     )
                 )
 
+            for rule in rules[first_rule:]:
+                rule.severity = field.severity
+                rule.max_failure_pct = field.max_failure_pct
+
         return rules
 
     def _count_rows_and_failures(
@@ -144,10 +158,11 @@ class _QualityCheckMixin:
 
         for rule, fail in zip(rules, fail_counts):
             if rule.kind is ViolationKind.DUPLICATE_VALUE:
-                violation = self._duplicate_violation(df, rule.column, row_count)
+                violation = self._duplicate_violation(df, rule, row_count)
             elif fail:
                 violation = Violation(
                     kind=rule.kind,
+                    severity=rule.severity_for(fail, row_count),
                     column=rule.column,
                     constraint=rule.constraint,
                     row_pct=round(fail / row_count * 100, 1),
@@ -159,14 +174,15 @@ class _QualityCheckMixin:
 
             if violation is not None:
                 violations.append(violation)
-                if not lazy:
+                if not lazy and violation.severity is Severity.ERROR:
                     return violations
 
         return violations
 
     def _duplicate_violation(
-        self, df: DataFrame, col_name: str, row_count: int
+        self, df: DataFrame, rule: _RowRule, row_count: int
     ) -> Violation | None:
+        col_name = rule.column
         duplicate_groups = (
             df.filter(F.col(col_name).isNotNull())
             .groupBy(col_name)
@@ -179,6 +195,7 @@ class _QualityCheckMixin:
         sample = [row[col_name] for row in duplicate_groups.select(col_name).limit(5).collect()]
         return Violation(
             kind=ViolationKind.DUPLICATE_VALUE,
+            severity=rule.severity_for(fail, row_count),
             column=col_name,
             constraint="unique",
             row_pct=round(fail / row_count * 100, 1),

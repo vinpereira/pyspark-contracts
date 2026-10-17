@@ -1,6 +1,7 @@
 import json
 
 from pyspark_contracts._dtype_json import dtype_to_json
+from pyspark_contracts._report import Severity
 
 
 class _DocumentationMixin:
@@ -11,10 +12,10 @@ class _DocumentationMixin:
         Includes every field's type (both a human-readable ``simpleString()`` and a
         machine-readable ``type_json`` for exact reconstruction), nullability, every
         quality constraint that's set, ``description``/``metadata``, the
-        name/description of every ``@check`` method, and ``min_rows``/``max_rows`` if
-        set. Comprehensive enough to work as a data dictionary or to share a
-        contract's shape without importing the Python class — see
-        :meth:`.ContractSchema.from_dict`.
+        name/description of every ``@check`` method, ``min_rows``/``max_rows`` if
+        set, and ``strict`` if ``True``. Comprehensive enough to work as a data
+        dictionary or to share a contract's shape without importing the Python class —
+        see :meth:`.ContractSchema.from_dict`.
 
         ``@check`` methods and ``Field(condition=...)`` lambdas are arbitrary Python
         code and can never be serialized — only their description text is included,
@@ -22,7 +23,8 @@ class _DocumentationMixin:
 
         Returns:
             A dict shaped ``{"contract": ..., "fields": {...}, "checks": {...}}``,
-            with ``"min_rows"``/``"max_rows"`` included only when set.
+            with ``"min_rows"``/``"max_rows"`` included only when set and
+            ``"strict": True`` only when the contract is strict.
         """
         fields: dict[str, dict] = {}
         for name, field in cls._fields.items():
@@ -47,6 +49,10 @@ class _DocumentationMixin:
                 entry["condition_description"] = field.condition_description
             if field.unique:
                 entry["unique"] = True
+            if field.severity is not Severity.ERROR:
+                entry["severity"] = field.severity.value
+            if field.max_failure_pct is not None:
+                entry["max_failure_pct"] = field.max_failure_pct
             if field.description is not None:
                 entry["description"] = field.description
             if field.metadata is not None:
@@ -64,6 +70,8 @@ class _DocumentationMixin:
             result["min_rows"] = cls.min_rows
         if cls.max_rows is not None:
             result["max_rows"] = cls.max_rows
+        if cls.strict:
+            result["strict"] = True
         return result
 
     @classmethod
@@ -76,7 +84,8 @@ class _DocumentationMixin:
         """Returns a human-readable, printable summary of this contract.
 
         One line per field (name, type, nullability, active constraints,
-        description, metadata), followed by ``min_rows``/``max_rows`` if set and a
+        description, metadata), followed by ``min_rows``/``max_rows`` if set, a
+        ``Strict:`` line if the contract is strict, and a
         ``Checks:`` section listing every ``@check``'s name and description, if any.
         The exact column alignment isn't part of this method's contract — only the
         information it contains is.
@@ -107,6 +116,10 @@ class _DocumentationMixin:
                 constraints.append(f"condition={field.condition_description!r}")
             if field.unique:
                 constraints.append("unique")
+            if field.severity is not Severity.ERROR:
+                constraints.append(f"severity={field.severity}")
+            if field.max_failure_pct is not None:
+                constraints.append(f"max_failure_pct={field.max_failure_pct}")
 
             parts = [
                 f"  {name:<{name_width}}",
@@ -132,10 +145,15 @@ class _DocumentationMixin:
             lines.append("")
             lines.append(f"Rows: {', '.join(bounds)}")
 
+        if cls.strict:
+            lines.append("")
+            lines.append("Strict: undeclared columns are violations")
+
         if cls._checks:
             lines.append("")
             lines.append("Checks:")
             for check_name, method in cls._checks.items():
-                lines.append(f"  {check_name}: {method._check_description}")
+                severity = "" if method._check_severity is Severity.ERROR else " (warn)"
+                lines.append(f"  {check_name}{severity}: {method._check_description}")
 
         return "\n".join(lines)

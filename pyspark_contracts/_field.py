@@ -5,7 +5,16 @@ from decimal import Decimal
 from pyspark.sql import Column
 from pyspark.sql.types import DataType
 
+from pyspark_contracts._report import Severity
+
 _Comparable = int | float | Decimal | date | datetime
+
+
+def _severity(value: str, caller: str) -> Severity:
+    try:
+        return Severity(value)
+    except ValueError:
+        raise ValueError(f"{caller} severity must be 'error' or 'warn', got {value!r}") from None
 
 
 class Field:
@@ -19,7 +28,9 @@ class Field:
     Args:
         dtype: The expected Spark ``DataType`` for this column (e.g. ``StringType()``,
             ``DecimalType(26, 12)``). Compared against the DataFrame's actual schema;
-            a mismatch produces a ``type_mismatch`` violation.
+            a mismatch produces a ``type_mismatch`` violation. The metadata of fields
+            nested inside a ``StructType`` (comments, units, ...) is ignored, since it's
+            documentation rather than part of the data's shape.
         nullable: Whether the column may contain null values. Defaults to ``True``.
             Set ``False`` to produce a ``null_violation`` when any row is null.
         min_value: Minimum allowed value (numeric or date/timestamp types). Values
@@ -56,6 +67,15 @@ class Field:
             than the other constraints: it needs a ``groupBy``, so it runs as its own
             Spark action instead of sharing the single pass that checks the others.
             Null values are never considered duplicates of each other.
+        severity: ``"error"`` (the default) or ``"warn"``. Applies to every data
+            constraint on this field (not to ``missing_column``/``type_mismatch``,
+            which are always errors). A ``"warn"`` violation is reported and logged
+            but never makes ``mode="hard"`` raise.
+        max_failure_pct: A tolerance, as a percentage of rows (0–100, like
+            ``row_pct``). A data constraint failing on at most this share of rows is
+            reported as a ``"warn"`` violation instead of an error, so it stays
+            visible without aborting the job. Compared against the exact share, not
+            the rounded ``row_pct``.
     """
 
     def __init__(
@@ -74,7 +94,14 @@ class Field:
         description: str | None = None,
         metadata: dict | None = None,
         unique: bool = False,
+        severity: str = "error",
+        max_failure_pct: float | None = None,
     ) -> None:
+        if max_failure_pct is not None and not 0 <= max_failure_pct <= 100:
+            raise ValueError(
+                f"Field() max_failure_pct must be a percentage between 0 and 100, "
+                f"got {max_failure_pct!r}"
+            )
         self.dtype = dtype
         self.nullable = nullable
         self.min_value = min_value
@@ -88,6 +115,8 @@ class Field:
         self.description = description
         self.metadata = metadata
         self.unique = unique
+        self.severity = _severity(severity, "Field()")
+        self.max_failure_pct = max_failure_pct
 
     def _has_quality_constraints(self) -> bool:
         """Whether this field declares at least one row-level data constraint.
