@@ -199,6 +199,24 @@ Checked right after the row count is known, so they apply under `DATA_ONLY` and
 `@check`/`condition`, `min_rows`/`max_rows` are plain data, so they round-trip through
 `to_dict()`/`ContractSchema` with no "can't reconstruct" warning.
 
+## Strict contracts
+
+By default a DataFrame may carry columns the contract doesn't declare. Set `strict = True` to
+report each of them as an `unexpected_column` violation — useful for an output contract right
+before writing to a table, where a leftover debug or join column shouldn't slip through:
+
+```python
+class FinalTableContract(Contract):
+    strict = True
+    vin = Field(StringType(), nullable=False)
+    odometer = Field(FloatType())
+```
+
+It's a structural check like `missing_column`: it reads only `df.schema`, so it runs under
+`SCHEMA_ONLY` and `SCHEMA_AND_DATA` (not `DATA_ONLY`) with no Spark action, and it round-trips
+through `to_dict()`/`ContractSchema`. Unexpected columns don't stop `condition` or `@check`
+from running, since every column they could reference is still there.
+
 ## Disabling validation
 
 ```bash
@@ -347,6 +365,7 @@ nulls = [v for v in report.violations if v.kind == ViolationKind.NULL_VIOLATION]
 | `check_failed` | `@check`-decorated method returned non-empty failing rows (named in `check`, not `column`) |
 | `duplicate_value` | `Field(unique=True)` column has repeated (non-null) values |
 | `row_count_out_of_range` | DataFrame row count below `min_rows` or above `max_rows` |
+| `unexpected_column` | `strict = True` contract, and the DataFrame has a column it doesn't declare |
 
 ## Performance note
 

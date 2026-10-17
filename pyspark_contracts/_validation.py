@@ -16,6 +16,7 @@ from pyspark_contracts._report import (
 class _ValidationMixin:
     min_rows: int | None = None
     max_rows: int | None = None
+    strict: bool = False
 
     def _report_name(self) -> str:
         return type(self).__name__

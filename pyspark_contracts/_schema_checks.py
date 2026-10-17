@@ -60,4 +60,17 @@ class _SchemaCheckMixin:
                 if not lazy:
                     return violations
 
+        if self.strict:
+            for col_name, dtype in actual.items():
+                if col_name not in self._fields:
+                    violations.append(
+                        Violation(
+                            kind=ViolationKind.UNEXPECTED_COLUMN,
+                            column=col_name,
+                            actual_type=dtype.simpleString(),
+                        )
+                    )
+                    if not lazy:
+                        return violations
+
         return violations

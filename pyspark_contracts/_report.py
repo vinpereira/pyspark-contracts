@@ -23,6 +23,7 @@ class ViolationKind(str, Enum):
     CHECK_FAILED = "check_failed"
     DUPLICATE_VALUE = "duplicate_value"
     ROW_COUNT_OUT_OF_RANGE = "row_count_out_of_range"
+    UNEXPECTED_COLUMN = "unexpected_column"
 
     # Python 3.11+ formats a (str, Enum) member as "ViolationKind.X"; keep the plain
     # value on every supported version, as enum.StrEnum (3.11+ only) does.
@@ -48,8 +49,8 @@ class Violation:
         expected_type: For ``missing_column``/``type_mismatch`` — the declared
             ``Field`` type as a Spark type string (``DataType.simpleString()``,
             e.g. ``"decimal(26,12)"``, ``"array<string>"``).
-        actual_type: For ``type_mismatch`` — the DataFrame's actual type, in the
-            same format.
+        actual_type: For ``type_mismatch``/``unexpected_column`` — the DataFrame's
+            actual type, in the same format.
         constraint: Human-readable description of the specific constraint that
             failed (e.g. ``"min_value=0"``, ``"nullable"``, a ``condition``'s or
             ``@check``'s description text). For a ``type_mismatch`` whose two type

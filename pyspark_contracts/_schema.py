@@ -18,7 +18,8 @@ class ContractSchema(
     :class:`.Contract` subclass.
 
     Reconstructs everything :meth:`.Contract.to_dict` captured as data — types,
-    nullability, and every quality constraint (including ``min_rows``/``max_rows``) —
+    nullability, and every quality constraint (including ``min_rows``/``max_rows``
+    and ``strict``) —
     and shares the exact same ``validate()`` implementation ``Contract`` uses, so a
     reloaded schema enforces the same rules the original class did. It cannot
     reconstruct ``@check`` methods or ``Field(condition=...)`` lambdas, since those are
@@ -36,12 +37,14 @@ class ContractSchema(
         fields: dict[str, Field],
         min_rows: int | None = None,
         max_rows: int | None = None,
+        strict: bool = False,
     ) -> None:
         self._name = contract_name
         self._fields = fields
         self._checks: dict[str, Callable] = {}
         self.min_rows = min_rows
         self.max_rows = max_rows
+        self.strict = strict
 
     def _report_name(self) -> str:
         return self._name
@@ -104,6 +107,7 @@ class ContractSchema(
             fields,
             min_rows=schema_dict.get("min_rows"),
             max_rows=schema_dict.get("max_rows"),
+            strict=schema_dict.get("strict", False),
         )
 
     @classmethod

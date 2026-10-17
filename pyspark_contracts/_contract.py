@@ -53,6 +53,9 @@ class Contract(
     Optional class attributes ``min_rows``/``max_rows`` (plain ``int``, not
     ``Field``) assert something about the DataFrame as a whole rather than a single
     column — see the dataset-level checks section of the README.
+
+    Set the class attribute ``strict = True`` to report every DataFrame column the
+    contract doesn't declare as an ``unexpected_column`` violation. Off by default.
     """
 
     _fields: dict[str, Field]
