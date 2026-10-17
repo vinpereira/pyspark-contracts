@@ -73,19 +73,66 @@ What the library deliberately won't do is listed under *Non-goals* in the
 | `"hard"` (default) | Logs `ERROR` (JSON), raises `ContractViolationError` | — |
 | `"soft"` | Logs `WARNING` (JSON), continues | `ViolationReport` |
 
+Violations are errors by default. A rule marked as a warning (see
+[Severity and tolerance](#severity-and-tolerance)) never raises: if every violation is a
+warning, `"hard"` mode logs `WARNING` and returns the report too.
+
 ## Lazy vs fail-fast
 
-By default, `"hard"` mode stops at the first violation found (fewer Spark actions,
-faster feedback), while `"soft"` mode collects every violation so you get the full
-picture in one run. Override either with `lazy`:
+By default, `"hard"` mode stops at the first error found (fewer Spark actions, faster
+feedback), while `"soft"` mode collects every violation so you get the full picture in one
+run. Warnings found before that first error are kept — stopping at a warning could hide an
+error that should abort the job. Override either default with `lazy`:
 
 ```python
 # Hard mode, but collect every violation before raising
 OdometerContract().validate(df, lazy=True)
 
-# Soft mode, but stop at the first violation
+# Soft mode, but stop at the first error
 report = OdometerContract().validate(df, mode="soft", lazy=False)
 ```
+
+## Severity and tolerance
+
+Every violation has a `severity`: `"error"` (the default) or `"warn"`. Warnings are reported
+and logged like errors, but never make `"hard"` mode raise — useful for a signal you want to
+watch without aborting the job, or a rule that tolerates a little noise:
+
+```python
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.types import DateType, StringType
+from pyspark_contracts import Contract, Field, check
+
+class OdometerContract(Contract):
+    vin = Field(StringType(), nullable=False, regex="[A-Z0-9]{17}")
+
+    # Up to 0.1% null readings is a warning; more than that is an error
+    readingDate = Field(DateType(), nullable=False, max_failure_pct=0.1)
+
+    # Never more than a warning
+    note = Field(StringType(), max_length=200, severity="warn")
+
+    @check("delta_km should be under a plausible daily max", severity="warn")
+    def plausible_delta(self, df: DataFrame) -> DataFrame:
+        return df.filter(F.col("odometerEnd") - F.col("odometerStart") > 2000)
+```
+
+- `severity` on a `Field` applies to all of its data constraints; on `@check`, to that check.
+- `max_failure_pct` is a share of rows (0–100, like `row_pct`): a constraint failing on at most
+  that share is a warning instead of an error. It's compared against the exact share, so
+  `row_pct`'s rounding can't flip it.
+- Structural violations (`missing_column`, `type_mismatch`, `unexpected_column`) and
+  `row_count_out_of_range` are always errors.
+
+```python
+report = OdometerContract().validate(df)   # raises only if report.errors would be non-empty
+for v in report.warnings:
+    print(v.kind, v.column or v.check, v.row_pct)
+```
+
+`if report:` is still true when there are only warnings; use `report.errors` /
+`report.warnings` to tell them apart.
 
 ## Cross-column checks
 
@@ -248,6 +295,8 @@ If no logger is passed, the library emits JSON to stdout.
 | `regex` | `str` | Regex pattern the entire value must match — anchored for you, so `"[0-9]+"` rejects `"abc123"`. |
 | `allowed_values` | `list` | Allowlist of valid values. |
 | `unique` | `bool` | Default `False`. Set `True` to fail when the column has duplicate (non-null) values. |
+| `severity` | `str` | `"error"` (default) or `"warn"`, for every data constraint on the field. |
+| `max_failure_pct` | `float` | Percentage of rows (0–100) a constraint may fail on and still be only a warning. |
 
 ## Documenting a contract
 
@@ -330,9 +379,10 @@ Both modes emit the same structured JSON before acting:
   "mode": "hard",
   "depth": "schema_and_data",
   "violations": [
-    {"kind": "missing_column", "column": "odometerStart", "expected_type": "float"},
+    {"kind": "missing_column", "severity": "error", "column": "odometerStart", "expected_type": "float"},
     {
       "kind": "value_out_of_range",
+      "severity": "error",
       "column": "odometerEnd",
       "constraint": "min_value=0",
       "row_pct": 2.3,
@@ -355,6 +405,12 @@ filter message = "contract violation — job aborted"
 filter ispresent(violations)
 | flatten violations
 | stats count(*) by violations.kind, violations.column
+
+-- Errors only, ignoring warnings
+filter ispresent(violations)
+| flatten violations
+| filter violations.severity = "error"
+| stats count(*) by contract, violations.kind
 
 -- Failing @check methods across all runs
 filter ispresent(violations)

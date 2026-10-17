@@ -68,6 +68,14 @@ Generated from the docstrings in `pyspark_contracts`.
    :undoc-members:
 ```
 
+## Severity
+
+```{eval-rst}
+.. autoclass:: pyspark_contracts.Severity
+   :members:
+   :undoc-members:
+```
+
 ## ContractViolationError
 
 ```{eval-rst}

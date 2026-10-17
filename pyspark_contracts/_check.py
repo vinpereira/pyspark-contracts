@@ -1,7 +1,9 @@
 from collections.abc import Callable
 
+from pyspark_contracts._field import _severity
 
-def check(description: str) -> Callable[[Callable], Callable]:
+
+def check(description: str, *, severity: str = "error") -> Callable[[Callable], Callable]:
     """Marks a :class:`.Contract` method as a cross-column data quality check.
 
     The decorated method is collected automatically by ``Contract``'s metaclass — it
@@ -19,6 +21,8 @@ def check(description: str) -> Callable[[Callable], Callable]:
             ``check_failed`` violation's ``constraint`` text, and exported by
             ``to_dict()``/``describe()`` — the check's code itself is never
             serialized.
+        severity: ``"error"`` (the default) or ``"warn"``. A ``"warn"`` check's
+            failures are reported and logged but never make ``mode="hard"`` raise.
 
     Example:
         >>> class FinalDfContract(Contract):
@@ -27,8 +31,11 @@ def check(description: str) -> Callable[[Callable], Callable]:
         ...         return df.filter(F.col("delta_km") < 0)
     """
 
+    check_severity = _severity(severity, "check()")
+
     def decorator(func: Callable) -> Callable:
         func._check_description = description
+        func._check_severity = check_severity
         return func
 
     return decorator

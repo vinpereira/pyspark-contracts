@@ -100,6 +100,8 @@ class ContractSchema(
                 description=entry.get("description"),
                 metadata=entry.get("metadata"),
                 unique=entry.get("unique", False),
+                severity=entry.get("severity", "error"),
+                max_failure_pct=entry.get("max_failure_pct"),
             )
 
         unenforceable = list(schema_dict.get("checks", {}).keys())

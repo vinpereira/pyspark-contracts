@@ -31,7 +31,7 @@ def test_violation_report_to_dict_emits_kind_as_plain_string():
     v = Violation(kind=ViolationKind.CHECK_FAILED, check="no_negative")
     violation = ViolationReport("MyContract", [v], 100).to_dict()["violations"][0]
     assert type(violation["kind"]) is str
-    assert violation == {"kind": "check_failed", "check": "no_negative"}
+    assert violation == {"kind": "check_failed", "severity": "error", "check": "no_negative"}
     assert json.loads(json.dumps(violation))["kind"] == "check_failed"
 
 

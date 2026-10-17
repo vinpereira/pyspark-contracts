@@ -7,10 +7,15 @@ from pyspark_contracts._depth import ValidationDepth
 from pyspark_contracts._logging import get_logger
 from pyspark_contracts._report import (
     ContractViolationError,
+    Severity,
     Violation,
     ViolationKind,
     ViolationReport,
 )
+
+
+def _has_errors(violations: list[Violation]) -> bool:
+    return any(v.severity is Severity.ERROR for v in violations)
 
 
 class _ValidationMixin:
@@ -45,10 +50,13 @@ class _ValidationMixin:
         Args:
             df: The DataFrame to validate.
             mode: ``"hard"`` (default) logs at ``ERROR`` and raises
-                ``ContractViolationError`` on any violation. ``"soft"`` logs at
-                ``WARNING`` and returns the ``ViolationReport`` instead.
+                ``ContractViolationError`` when any violation has ``ERROR``
+                severity; if every violation is a warning it logs at ``WARNING`` and
+                returns the report. ``"soft"`` logs at ``WARNING`` and returns the
+                ``ViolationReport`` regardless of severity.
             lazy: Whether to collect every violation (``True``) or stop at the first
-                one found (``False``), across every stage. Defaults to ``None``,
+                error (``False``), across every stage — warnings found before it are
+                kept. Defaults to ``None``,
                 which resolves to fail-fast for ``mode="hard"`` and collect-all for
                 ``mode="soft"``; pass explicitly to override either default.
             depth: Which stage(s) to run — see :class:`.ValidationDepth`. Defaults to
@@ -93,8 +101,10 @@ class _ValidationMixin:
                 for v in violations
             )
 
+        # Fail-fast stops at the first *error*: stopping at a warning could hide a later
+        # error and let mode="hard" pass a DataFrame it should reject.
         if depth in (ValidationDepth.DATA_ONLY, ValidationDepth.SCHEMA_AND_DATA) and (
-            lazy or not violations
+            lazy or not _has_errors(violations)
         ):
             rules = self._row_rules(
                 skip_columns={v.column for v in violations},
@@ -103,9 +113,9 @@ class _ValidationMixin:
             # One Spark action for the row count and every row-level constraint at once
             row_count, fail_counts = self._count_rows_and_failures(df, rules)
             violations += self._check_dataset(row_count, lazy=lazy)
-            if row_count > 0 and (lazy or not violations):
+            if row_count > 0 and (lazy or not _has_errors(violations)):
                 violations += self._check_quality(df, row_count, rules, fail_counts, lazy=lazy)
-            if row_count > 0 and not blocks_cross_column and (lazy or not violations):
+            if row_count > 0 and not blocks_cross_column and (lazy or not _has_errors(violations)):
                 violations += self._check_custom(df, row_count, lazy=lazy, **kwargs)
 
         report = ViolationReport(self._report_name(), violations, row_count, mode=mode, depth=depth)
@@ -118,7 +128,7 @@ class _ValidationMixin:
                 "violations": report.to_dict()["violations"],
                 "row_count": row_count,
             }
-            if mode == "hard":
+            if mode == "hard" and report.errors:
                 _logger.error("contract violation — job aborted", extra=log_data)
                 raise ContractViolationError(report)
             else:

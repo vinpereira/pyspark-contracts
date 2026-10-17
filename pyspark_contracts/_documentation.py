@@ -1,6 +1,7 @@
 import json
 
 from pyspark_contracts._dtype_json import dtype_to_json
+from pyspark_contracts._report import Severity
 
 
 class _DocumentationMixin:
@@ -48,6 +49,10 @@ class _DocumentationMixin:
                 entry["condition_description"] = field.condition_description
             if field.unique:
                 entry["unique"] = True
+            if field.severity is not Severity.ERROR:
+                entry["severity"] = field.severity.value
+            if field.max_failure_pct is not None:
+                entry["max_failure_pct"] = field.max_failure_pct
             if field.description is not None:
                 entry["description"] = field.description
             if field.metadata is not None:
@@ -111,6 +116,10 @@ class _DocumentationMixin:
                 constraints.append(f"condition={field.condition_description!r}")
             if field.unique:
                 constraints.append("unique")
+            if field.severity is not Severity.ERROR:
+                constraints.append(f"severity={field.severity}")
+            if field.max_failure_pct is not None:
+                constraints.append(f"max_failure_pct={field.max_failure_pct}")
 
             parts = [
                 f"  {name:<{name_width}}",
@@ -144,6 +153,7 @@ class _DocumentationMixin:
             lines.append("")
             lines.append("Checks:")
             for check_name, method in cls._checks.items():
-                lines.append(f"  {check_name}: {method._check_description}")
+                severity = "" if method._check_severity is Severity.ERROR else " (warn)"
+                lines.append(f"  {check_name}{severity}: {method._check_description}")
 
         return "\n".join(lines)

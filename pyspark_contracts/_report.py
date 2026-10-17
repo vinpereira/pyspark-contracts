@@ -5,7 +5,28 @@ from enum import Enum
 from pyspark_contracts._depth import ValidationDepth
 
 
-class ViolationKind(str, Enum):
+class _StrEnum(str, Enum):
+    # Python 3.11+ formats a (str, Enum) member as "ClassName.X"; keep the plain value on
+    # every supported version, as enum.StrEnum (3.11+ only) does.
+    def __str__(self) -> str:
+        return self.value
+
+    __format__ = str.__format__
+
+
+class Severity(_StrEnum):
+    """How serious a :class:`Violation` is.
+
+    ``ERROR`` violations make ``validate(mode="hard")`` raise; ``WARN`` violations are
+    reported and logged but never raise. A ``str`` subclass, like :class:`ViolationKind`:
+    ``Severity.WARN == "warn"``.
+    """
+
+    ERROR = "error"
+    WARN = "warn"
+
+
+class ViolationKind(_StrEnum):
     """The type of a :class:`Violation`.
 
     A ``str`` subclass, so each member compares equal to — and formats as — its
@@ -25,13 +46,6 @@ class ViolationKind(str, Enum):
     ROW_COUNT_OUT_OF_RANGE = "row_count_out_of_range"
     UNEXPECTED_COLUMN = "unexpected_column"
 
-    # Python 3.11+ formats a (str, Enum) member as "ViolationKind.X"; keep the plain
-    # value on every supported version, as enum.StrEnum (3.11+ only) does.
-    def __str__(self) -> str:
-        return self.value
-
-    __format__ = str.__format__
-
 
 @dataclass
 class Violation:
@@ -41,6 +55,10 @@ class Violation:
         kind: The violation type, a :class:`ViolationKind`. A plain string such as
             ``"missing_column"`` is accepted and converted; an unknown one raises
             ``ValueError``.
+        severity: A :class:`Severity` — ``ERROR`` (the default) or ``WARN``, from the
+            rule's ``severity``/``max_failure_pct`` settings. Structural and
+            ``row_count_out_of_range`` violations are always ``ERROR``. A plain string
+            is accepted and converted.
         column: The field this violation belongs to, or ``None`` for violations
             that aren't about a single column: ``row_count_out_of_range`` (the
             DataFrame as a whole) and ``check_failed`` (see ``check``).
@@ -68,6 +86,7 @@ class Violation:
     """
 
     kind: ViolationKind
+    severity: Severity = Severity.ERROR
     column: str | None = None
     check: str | None = None
     expected_type: str | None = None
@@ -79,13 +98,15 @@ class Violation:
 
     def __post_init__(self) -> None:
         self.kind = ViolationKind(self.kind)
+        self.severity = Severity(self.severity)
 
 
 class ViolationReport:
     """The result of a :meth:`.Contract.validate` call.
 
     Falsy (and ``is_empty()`` is ``True``) when there are no violations — the common
-    ``if report: ...`` / ``if not report: ...`` idiom works as expected.
+    ``if report: ...`` / ``if not report: ...`` idiom works as expected. Warnings count as
+    violations here; use :attr:`errors`/:attr:`warnings` to tell them apart.
 
     Attributes:
         contract_name: Name of the contract that was validated (the ``Contract``
@@ -119,6 +140,16 @@ class ViolationReport:
         """Whether validation found no violations. Equivalent to ``not report``."""
         return len(self.violations) == 0
 
+    @property
+    def errors(self) -> list[Violation]:
+        """The ``ERROR``-severity violations — the ones that make ``mode="hard"`` raise."""
+        return [v for v in self.violations if v.severity is Severity.ERROR]
+
+    @property
+    def warnings(self) -> list[Violation]:
+        """The ``WARN``-severity violations — reported and logged, never raised."""
+        return [v for v in self.violations if v.severity is Severity.WARN]
+
     def to_dict(self) -> dict:
         """Serializes this report to a plain ``dict`` — the same shape logged as
         JSON on a violation, with each :class:`Violation`'s unset (``None``) fields
@@ -130,7 +161,7 @@ class ViolationReport:
             "depth": self.depth.value,
             "violations": [
                 {
-                    k: v.value if isinstance(v, ViolationKind) else v
+                    k: v.value if isinstance(v, _StrEnum) else v
                     for k, v in dataclasses.asdict(violation).items()
                     if v is not None
                 }
@@ -141,7 +172,8 @@ class ViolationReport:
 
 
 class ContractViolationError(Exception):
-    """Raised by ``validate(mode="hard")`` (the default) when violations are found.
+    """Raised by ``validate(mode="hard")`` (the default) when at least one
+    ``ERROR``-severity violation is found. Warnings alone never raise it.
 
     Attributes:
         report: The :class:`ViolationReport` describing what failed.
@@ -149,5 +181,8 @@ class ContractViolationError(Exception):
 
     def __init__(self, report: ViolationReport) -> None:
         self.report = report
-        n = len(report.violations)
-        super().__init__(f"{report.contract_name} — {n} violation(s) — job aborted")
+        if report.warnings:
+            counts = f"{len(report.errors)} error(s), {len(report.warnings)} warning(s)"
+        else:
+            counts = f"{len(report.violations)} violation(s)"
+        super().__init__(f"{report.contract_name} — {counts} — job aborted")

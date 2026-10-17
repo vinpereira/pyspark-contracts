@@ -2,7 +2,7 @@ import inspect
 
 from pyspark.sql import DataFrame
 
-from pyspark_contracts._report import Violation, ViolationKind
+from pyspark_contracts._report import Severity, Violation, ViolationKind
 
 
 class _CustomCheckMixin:
@@ -31,6 +31,7 @@ class _CustomCheckMixin:
                 violations.append(
                     Violation(
                         kind=ViolationKind.CHECK_FAILED,
+                        severity=method._check_severity,
                         check=check_name,
                         constraint=method._check_description,
                         row_pct=round(fail / row_count * 100, 1),
@@ -38,7 +39,7 @@ class _CustomCheckMixin:
                         sample_values=[row.asDict() for row in failing_df.limit(5).collect()],
                     )
                 )
-                if not lazy:
+                if not lazy and violations[-1].severity is Severity.ERROR:
                     return violations
 
         return violations
