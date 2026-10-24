@@ -129,9 +129,13 @@ class _ValidationMixin:
                 "row_count": row_count,
             }
             if mode == "hard" and report.errors:
-                _logger.error("contract violation — job aborted", extra=log_data)
+                _logger.error(
+                    f"contract violation — job aborted: {report.summary()}", extra=log_data
+                )
                 raise ContractViolationError(report)
             else:
-                _logger.warning("contract violation — continuing", extra=log_data)
+                _logger.warning(
+                    f"contract violation — continuing: {report.summary()}", extra=log_data
+                )
 
         return report

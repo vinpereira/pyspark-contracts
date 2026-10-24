@@ -283,6 +283,17 @@ OdometerContract().validate(df, logger=logger)
 
 If no logger is passed, the library emits JSON to stdout.
 
+The details travel as extra fields on the log record (`contract`, `violations`, ...), which a
+formatter that prints only the message drops. So the message itself also names what failed —
+counts, then each violation's kind, column or check, constraint, and failing-row count:
+
+```
+ERROR:my-etl-job:contract violation — job aborted: 2 violation(s) — null_violation vin (nullable): 3 rows; value_out_of_range odometerEnd (min_value=0): 42 rows
+```
+
+Sample values are never in the message, only in the structured fields. It lists the first 10
+violations, then `… and N more`.
+
 ## Field options
 
 | Option | Type | Description |
@@ -388,12 +399,13 @@ Both also work on a `ContractSchema` reloaded with `from_dict()`/`from_json()`.
 
 ## Log output
 
-Both modes emit the same structured JSON before acting:
+Both modes emit the same structured JSON before acting (the `message` ends with a summary of
+the violations, so it's useful on its own too):
 
 ```json
 {
   "level": "ERROR",
-  "message": "contract violation — job aborted",
+  "message": "contract violation — job aborted: 2 violation(s) — missing_column odometerStart (expected float); value_out_of_range odometerEnd (min_value=0): 42 rows",
   "contract": "OdometerContract",
   "mode": "hard",
   "depth": "schema_and_data",
@@ -417,7 +429,7 @@ Both modes emit the same structured JSON before acting:
 
 ```sql
 -- All contract violations in the last 7 days
-filter message = "contract violation — job aborted"
+filter message like "contract violation — job aborted"
 | stats count(*) as failures by contract
 
 -- Violations by column across all runs

@@ -24,6 +24,9 @@ What a pipeline needs to act on failures, not just detect them.
   `sample_values` say *which* records failed, not just the offending values.
 - **Uniqueness across several columns** — e.g. one row per key and reference date, which a
   single-column `unique` can't express.
+- **Declare columns whose names aren't valid Python identifiers** — e.g.
+  `duration = Field(LongType(), column="accumulatedData.duration")`, so a column with dots in
+  its name can be a normal class attribute instead of needing `type(...)` or a reloaded schema.
 - **Blank strings as missing** — an option to treat `""` and whitespace-only strings like
   nulls for required fields, common in text files where an empty field isn't a null.
 
