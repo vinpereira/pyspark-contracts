@@ -79,7 +79,13 @@ def test_hard_mode_does_not_raise_on_warnings_only(spark, caplog):
     assert report
     assert not report.errors
     assert _kinds_and_severities(report) == [("length_out_of_range", "b", "warn")]
-    assert _records(caplog, logger) == [("WARNING", "contract violation — continuing")]
+    assert _records(caplog, logger) == [
+        (
+            "WARNING",
+            "contract violation — continuing: 0 error(s), 1 warning(s) — "
+            "length_out_of_range b (max_length=2): 1 row [warn]",
+        )
+    ]
 
 
 def test_hard_mode_raises_on_errors_and_message_counts_both(spark, caplog):
@@ -95,7 +101,14 @@ def test_hard_mode_raises_on_errors_and_message_counts_both(spark, caplog):
         C().validate(spark.createDataFrame(ROWS, SCHEMA), lazy=True, logger=logger)
 
     assert str(exc_info.value) == "C — 1 error(s), 1 warning(s) — job aborted"
-    assert _records(caplog, logger) == [("ERROR", "contract violation — job aborted")]
+    assert _records(caplog, logger) == [
+        (
+            "ERROR",
+            "contract violation — job aborted: 1 error(s), 1 warning(s) — "
+            "null_violation a (nullable): 1 row; "
+            "length_out_of_range b (max_length=2): 1 row [warn]",
+        )
+    ]
     report = exc_info.value.report
     assert [v.column for v in report.errors] == ["a"]
     assert [v.column for v in report.warnings] == ["b"]

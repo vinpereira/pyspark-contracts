@@ -101,6 +101,34 @@ class Violation:
         self.severity = Severity(self.severity)
 
 
+_SUMMARY_LIMIT = 10
+
+
+def _describe(violation: Violation) -> str:
+    """One violation as a short line: kind, what it's about, why, and how many rows."""
+    kind = violation.kind
+    if kind is ViolationKind.MISSING_COLUMN:
+        detail = f"expected {violation.expected_type}" if violation.expected_type else None
+    elif kind is ViolationKind.TYPE_MISMATCH:
+        detail = f"expected {violation.expected_type}, got {violation.actual_type}"
+        if violation.constraint:
+            detail += f"; {violation.constraint}"
+    elif kind is ViolationKind.UNEXPECTED_COLUMN:
+        detail = f"got {violation.actual_type}" if violation.actual_type else None
+    else:
+        detail = violation.constraint
+
+    text = f"{kind} {violation.column or violation.check or ''}".strip()
+    if detail:
+        text += f" ({detail})"
+    if violation.failure_count is not None:
+        rows = "row" if violation.failure_count == 1 else "rows"
+        text += f": {violation.failure_count} {rows}"
+    if violation.severity is Severity.WARN:
+        text += " [warn]"
+    return text
+
+
 class ViolationReport:
     """The result of a :meth:`.Contract.validate` call.
 
@@ -135,6 +163,25 @@ class ViolationReport:
 
     def __bool__(self) -> bool:
         return len(self.violations) > 0
+
+    def _counts(self) -> str:
+        if self.warnings:
+            return f"{len(self.errors)} error(s), {len(self.warnings)} warning(s)"
+        return f"{len(self.violations)} violation(s)"
+
+    def summary(self) -> str:
+        """The violations as one readable line — counts, then each violation's kind, column
+        or check, constraint, and failing-row count. Sample values are left out, so it's safe
+        to log. Capped at the first 10 violations.
+
+        Used in the log message, so the failures are visible even when the logger's formatter
+        prints only the message.
+        """
+        shown = "; ".join(_describe(v) for v in self.violations[:_SUMMARY_LIMIT])
+        hidden = len(self.violations) - _SUMMARY_LIMIT
+        if hidden > 0:
+            shown += f"; … and {hidden} more"
+        return f"{self._counts()} — {shown}"
 
     def is_empty(self) -> bool:
         """Whether validation found no violations. Equivalent to ``not report``."""
@@ -181,8 +228,4 @@ class ContractViolationError(Exception):
 
     def __init__(self, report: ViolationReport) -> None:
         self.report = report
-        if report.warnings:
-            counts = f"{len(report.errors)} error(s), {len(report.warnings)} warning(s)"
-        else:
-            counts = f"{len(report.violations)} violation(s)"
-        super().__init__(f"{report.contract_name} — {counts} — job aborted")
+        super().__init__(f"{report.contract_name} — {report._counts()} — job aborted")

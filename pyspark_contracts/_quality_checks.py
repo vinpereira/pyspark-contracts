@@ -29,9 +29,23 @@ class _RowRule:
         return self.severity
 
 
+# Helper column of the duplicate count; named so it can't collide with a user's column
+_DUPLICATE_COUNT = "__pyspark_contracts_duplicate_count"
+
+
+def _quote(col_name: str) -> str:
+    """``col_name`` as one backtick-quoted identifier.
+
+    Without quoting, Spark reads a dot in a name as a nested field (``a.b`` is field ``b`` of
+    column ``a``), so a flat column literally named ``a.b`` — what Glue's ``relationalize``
+    produces — can't be referenced.
+    """
+    return "`" + col_name.replace("`", "``") + "`"
+
+
 class _QualityCheckMixin:
     def _sample_values(self, df: DataFrame, col_name: str, condition) -> list:
-        rows = df.filter(condition).select(col_name).limit(5).collect()
+        rows = df.filter(condition).select(_quote(col_name)).limit(5).collect()
         return [row[0] for row in rows]
 
     def _row_rules(self, skip_columns: set, blocks_cross_column: bool) -> list[_RowRule]:
@@ -46,7 +60,7 @@ class _QualityCheckMixin:
         for col_name, field in self._fields.items():
             if col_name in skip_columns or not field._has_quality_constraints():
                 continue
-            col = F.col(col_name)
+            col = F.col(_quote(col_name))
             first_rule = len(rules)
 
             if not field.nullable:
@@ -184,15 +198,17 @@ class _QualityCheckMixin:
     ) -> Violation | None:
         col_name = rule.column
         duplicate_groups = (
-            df.filter(F.col(col_name).isNotNull())
-            .groupBy(col_name)
-            .count()
-            .filter(F.col("count") > 1)
+            df.filter(F.col(_quote(col_name)).isNotNull())
+            .groupBy(_quote(col_name))
+            .agg(F.count(F.lit(1)).alias(_DUPLICATE_COUNT))
+            .filter(F.col(_DUPLICATE_COUNT) > 1)
         )
-        fail = duplicate_groups.agg(F.sum("count")).collect()[0][0] or 0
+        fail = duplicate_groups.agg(F.sum(_DUPLICATE_COUNT)).collect()[0][0] or 0
         if not fail:
             return None
-        sample = [row[col_name] for row in duplicate_groups.select(col_name).limit(5).collect()]
+        sample = [
+            row[col_name] for row in duplicate_groups.select(_quote(col_name)).limit(5).collect()
+        ]
         return Violation(
             kind=ViolationKind.DUPLICATE_VALUE,
             severity=rule.severity_for(fail, row_count),

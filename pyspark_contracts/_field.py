@@ -50,7 +50,9 @@ class Field:
         condition: A cross-column check anchored to this field. Receives the column
             name and returns a Spark ``Column`` expression that must be ``True`` for
             the row to pass — typically comparing this column against another, e.g.
-            ``lambda f: F.col(f) < F.col("end_dt")``. Rows where it evaluates false
+            ``lambda f: F.col(f) < F.col("end_dt")``. The name is passed as declared;
+            if it contains dots or backticks, quote it yourself:
+            ``F.col(f"`{f}`")``. Rows where it evaluates false
             produce ``condition_failed``. Skipped entirely when the DataFrame has any
             ``missing_column``/``type_mismatch`` violation, since it may reference
             columns that don't exist.
