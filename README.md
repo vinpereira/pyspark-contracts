@@ -298,6 +298,25 @@ If no logger is passed, the library emits JSON to stdout.
 | `severity` | `str` | `"error"` (default) or `"warn"`, for every data constraint on the field. |
 | `max_failure_pct` | `float` | Percentage of rows (0–100) a constraint may fail on and still be only a warning. |
 
+## Columns with dots in their name
+
+Names like `accumulatedData.duration` (what Glue's `relationalize` produces) are validated like
+any other column: the library quotes every column it references, so the dot isn't read as a
+nested field. A class attribute can't contain a dot, so declare such a contract from a
+namespace dict, or reload it from its exported dict:
+
+```python
+from pyspark.sql.types import LongType
+from pyspark_contracts import Contract, Field
+
+MyContract = type("MyContract", (Contract,), {
+    "accumulatedData.duration": Field(LongType(), nullable=False, min_value=0),
+})
+```
+
+A `condition` lambda receives the name as declared, so quote it in `F.col` if it has dots:
+``F.col(f"`{f}`")``.
+
 ## Documenting a contract
 
 `description` and `metadata` on `Field` are pure documentation — they never affect validation:
