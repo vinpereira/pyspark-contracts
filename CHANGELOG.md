@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.11.1] - 2026-10-24
+
+### Fixed
+- Column names containing dots (e.g. the flat `accumulatedData.duration` columns Glue's
+  `relationalize` produces) no longer make validation fail with an `AnalysisException`.
+  Spark read the dot as a nested field; the library now quotes every column it references.
+  A `Field(condition=...)` lambda still receives the name as declared, so quote it in
+  `F.col` if it has dots: ``F.col(f"`{f}`")``. Since a class attribute can't contain a dot,
+  declare such a contract with `type("MyContract", (Contract,), {"a.b": Field(...)})` or
+  reload it with `ContractSchema.from_dict` (see the README).
+- `unique=True` on a column literally named `count` no longer fails with
+  `AMBIGUOUS_REFERENCE`; the duplicate-count helper column has a name that can't collide.
+
+### Changed
+- The log message now ends with a summary of the violations, so a logger whose formatter
+  prints only the message (the structured fields travel as `extra`, which many formatters
+  drop) still shows what failed: `contract violation — job aborted: 2 violation(s) —
+  null_violation vin (nullable): 3 rows; value_out_of_range odometerEnd (min_value=0): 42
+  rows`. It lists the first 10 violations and never includes sample values. The structured
+  fields are unchanged. **A query that matches the message exactly** (e.g. CloudWatch Logs
+  Insights `filter message = "contract violation — job aborted"`) **must switch to `like`.**
+
+### Added
+- `ViolationReport.summary()`, the one-line text used in the log message.
+
 ## [0.11.0] - 2026-10-17
 
 Last feature release before v1.0.0. With default settings, existing contracts behave as
