@@ -82,7 +82,14 @@ class Violation:
             applicability as ``row_pct``.
         sample_values: Up to 5 offending values, for quick diagnosis. For
             ``check_failed``, these are full rows (as ``dict``) rather than single
-            column values, since a ``@check`` can span multiple columns.
+            column values, since a ``@check`` can span multiple columns. For a
+            ``unique_together`` violation, each is a ``dict`` of the duplicated column
+            combination.
+        sample_keys: When the contract declares a ``key``, the key columns of the rows
+            behind each of ``sample_values``, as ``{column: value}`` dicts in the same
+            order — which records failed, not just the bad values. Only for row-level
+            constraints (not ``unique``/``unique_together``, ``check_failed``, structural
+            or row-count violations). Never part of the log message or ``summary()``.
     """
 
     kind: ViolationKind
@@ -95,6 +102,7 @@ class Violation:
     row_pct: float | None = None
     failure_count: int | None = None
     sample_values: list | None = None
+    sample_keys: list | None = None
 
     def __post_init__(self) -> None:
         self.kind = ViolationKind(self.kind)

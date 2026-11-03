@@ -3,17 +3,7 @@
 What's planned for pyspark-contracts, and what's deliberately out of scope. Plans can change;
 once something ships it moves from here to the [CHANGELOG](https://github.com/vinpereira/pyspark-contracts/blob/main/CHANGELOG.md).
 
-## Next: v0.11.1 — Fixes
-
-- **Column names containing dots** (e.g. produced by Glue's `relationalize`, like
-  `accumulatedData.duration`) currently make validation fail with an `AnalysisException`,
-  because Spark reads the dot as a nested field. Column references will be quoted so these
-  columns validate like any other.
-- **Your own logger keeps the details.** Violations are attached to the log record as `extra`
-  fields, which many formatters drop — with a logger that prints only the message, the log
-  says a contract failed but not which rules. The message itself will carry the violations.
-
-## v0.12.0 — Row-level outcomes
+## Next: v0.12.0 — Row-level outcomes
 
 What a pipeline needs to act on failures, not just detect them.
 

@@ -5,6 +5,7 @@ from pyspark.sql.types import StructType
 
 from pyspark_contracts._custom_checks import _CustomCheckMixin
 from pyspark_contracts._dataset_checks import _DatasetCheckMixin
+from pyspark_contracts._declared import normalize_key, normalize_unique_together
 from pyspark_contracts._documentation import _DocumentationMixin
 from pyspark_contracts._field import Field
 from pyspark_contracts._quality_checks import _QualityCheckMixin
@@ -20,11 +21,25 @@ class ContractMeta(type):
         for base in bases:
             fields.update(getattr(base, "_fields", {}))
             checks.update(getattr(base, "_checks", {}))
+        declared: dict[str, str] = {}
         for attr_name, value in namespace.items():
             if isinstance(value, Field):
-                fields[attr_name] = value
+                column = value.column or attr_name
+                if column in declared:
+                    raise TypeError(
+                        f"{name}: attributes '{declared[column]}' and '{attr_name}' both "
+                        f"declare column '{column}'"
+                    )
+                declared[column] = attr_name
+                fields[column] = value
             elif callable(value) and hasattr(value, "_check_description"):
                 checks[attr_name] = value
+        if "key" in namespace:
+            namespace["key"] = normalize_key(name, namespace["key"], fields)
+        if "unique_together" in namespace:
+            namespace["unique_together"] = normalize_unique_together(
+                name, namespace["unique_together"], fields
+            )
         namespace["_fields"] = fields
         namespace["_checks"] = checks
         return super().__new__(mcs, name, bases, namespace)
@@ -60,6 +75,11 @@ class Contract(
 
     Set the class attribute ``strict = True`` to report every DataFrame column the
     contract doesn't declare as an ``unexpected_column`` violation. Off by default.
+
+    ``key = ["a", "b"]`` names the columns that identify a row, so row-level violations
+    carry ``sample_keys`` — which records failed. ``unique_together = [("a", "b")]``
+    asserts that each combination of those columns occurs once. Both take declared
+    column names (the real column, if a field sets ``column=``).
     """
 
     _fields: dict[str, Field]
