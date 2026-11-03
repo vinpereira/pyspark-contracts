@@ -88,6 +88,22 @@ AssetHdrTelemetryReadingContract().validate(raw_df, depth=ValidationDepth.SCHEMA
 # after the expensive transforms, right before the write.
 ```
 
+### Quarantining bad rows instead of failing
+
+When a few bad rows shouldn't stop the job, `split()` separates them and the job keeps the
+rest. Write the rejected rows somewhere you can inspect them, then continue with the valid ones:
+
+```python
+valid, rejected = AssetHdrTelemetryReadingContract().split(df)
+
+rejected.write.mode("append").parquet(args["quarantine_path"])
+# ... rest of the ETL on `valid` ...
+```
+
+`rejected` carries a `_violations` column listing the rules each row broke. Cache `df` first if
+it's expensive to recompute, since `valid` and `rejected` are evaluated separately. To also get
+the counts in the job's log, call `validate(df, mode="soft")` alongside.
+
 ## Databricks
 
 ### Installing the package

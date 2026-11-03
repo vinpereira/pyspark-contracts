@@ -12,6 +12,7 @@ from pyspark_contracts._report import (
     ViolationReport,
 )
 from pyspark_contracts._schema import ContractSchema
+from pyspark_contracts._split import SplitResult
 
 __all__ = [
     "Contract",
@@ -23,6 +24,7 @@ __all__ = [
     "ContractSchema",
     "ContractViolationError",
     "Severity",
+    "SplitResult",
     "ViolationKind",
     "ViolationReport",
     "__version__",

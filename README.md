@@ -300,6 +300,58 @@ every row in a duplicate group. The violation is a `duplicate_value` with `colum
 after the field constraints, and costs one extra Spark action per group (a `groupBy`, like
 `unique`). Every group needs at least two declared columns.
 
+## Splitting valid and rejected rows
+
+`validate()` tells you a DataFrame has bad rows. `split()` takes them out, so a job can keep
+the bad rows for review and carry on with the rest:
+
+```python
+from pyspark.sql.types import DateType, StringType
+from pyspark_contracts import Contract, Field
+
+class OrderContract(Contract):
+    unique_together = [("customer_nr", "ref_date")]
+
+    customer_nr = Field(StringType(), nullable=False, blank_is_null=True)
+    ref_date = Field(DateType(), nullable=False)
+    status = Field(StringType(), allowed_values=["open", "closed"])
+
+valid, rejected = OrderContract().split(df)
+
+rejected.write.mode("append").saveAsTable("quarantine.orders")
+process(valid)
+```
+
+`valid` has the original columns. `rejected` has them plus `_violations`, an array of every rule
+the row broke, in declaration order:
+
+```
+customer_nr  ref_date    status    _violations
+C1           2026-01-01  open      [{duplicate_value, null, unique_together=(customer_nr, ref_date)}]
+C1           2026-01-01  closed    [{duplicate_value, null, unique_together=(customer_nr, ref_date)}]
+             2026-01-02  paused    [{null_violation, customer_nr, nullable, blank counts as null},
+                                    {value_not_allowed, status, allowed_values=['open', 'closed']}]
+```
+
+Each entry is a `struct<kind, column, constraint>`; `column` is null for `unique_together`. Use
+`errors_column="dq_errors"` to name the column something else.
+
+- **Same rules as `validate()`.** It uses the same predicates, so a rule that's null for a row
+  (like `min_value` on a null) doesn't reject it, and the per-rule counts match `validate()`'s.
+- **Only errors reject rows.** A rule with `severity="warn"` never takes a row out of `valid`.
+  `max_failure_pct` is ignored — it's a judgment about the whole DataFrame, which would need a
+  count; use `validate()` for tolerances.
+- **`@check` methods aren't evaluated.** They take the whole DataFrame, so their result can't be
+  attributed to input rows; `split()` emits a `UserWarning` naming them. `min_rows`/`max_rows`
+  are ignored too.
+- **Structural problems raise.** Missing, mistyped, or (with `strict`) unexpected columns make
+  row rules meaningless, so `split()` raises `ContractViolationError`.
+- **Lazy.** `split()` runs no Spark action and logs nothing. `valid` and `rejected` are two plans
+  over `df`, so `df.cache()` first if reading it is expensive. Each `unique`/`unique_together`
+  rule adds a shuffle.
+
+Call `validate(df, mode="soft")` as well when you want the report and the log line.
+
 ## Strict contracts
 
 By default a DataFrame may carry columns the contract doesn't declare. Set `strict = True` to

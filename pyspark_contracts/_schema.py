@@ -12,12 +12,18 @@ from pyspark_contracts._dtype_json import dtype_from_json
 from pyspark_contracts._field import Field
 from pyspark_contracts._quality_checks import _QualityCheckMixin
 from pyspark_contracts._schema_checks import _SchemaCheckMixin
+from pyspark_contracts._split import _SplitMixin
 from pyspark_contracts._struct_type import fields_to_struct_type
 from pyspark_contracts._validation import _ValidationMixin
 
 
 class ContractSchema(
-    _ValidationMixin, _SchemaCheckMixin, _QualityCheckMixin, _CustomCheckMixin, _DatasetCheckMixin
+    _ValidationMixin,
+    _SchemaCheckMixin,
+    _QualityCheckMixin,
+    _CustomCheckMixin,
+    _DatasetCheckMixin,
+    _SplitMixin,
 ):
     """Validates a DataFrame from an exported schema, without importing the original
     :class:`.Contract` subclass.

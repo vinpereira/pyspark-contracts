@@ -10,6 +10,7 @@ from pyspark_contracts._documentation import _DocumentationMixin
 from pyspark_contracts._field import Field
 from pyspark_contracts._quality_checks import _QualityCheckMixin
 from pyspark_contracts._schema_checks import _SchemaCheckMixin
+from pyspark_contracts._split import _SplitMixin
 from pyspark_contracts._struct_type import fields_to_struct_type
 from pyspark_contracts._validation import _ValidationMixin
 
@@ -52,6 +53,7 @@ class Contract(
     _QualityCheckMixin,
     _CustomCheckMixin,
     _DatasetCheckMixin,
+    _SplitMixin,
     metaclass=ContractMeta,
 ):
     """Base class for declaring a PySpark DataFrame schema and its data quality rules.
@@ -80,6 +82,9 @@ class Contract(
     carry ``sample_keys`` — which records failed. ``unique_together = [("a", "b")]``
     asserts that each combination of those columns occurs once. Both take declared
     column names (the real column, if a field sets ``column=``).
+
+    :meth:`split` separates the rows that pass the row-level rules from those that don't,
+    for jobs that quarantine bad rows instead of aborting.
     """
 
     _fields: dict[str, Field]
