@@ -13,9 +13,9 @@ class _DocumentationMixin:
         machine-readable ``type_json`` for exact reconstruction), nullability, every
         quality constraint that's set, ``description``/``metadata``, the
         name/description of every ``@check`` method, ``min_rows``/``max_rows`` if
-        set, and ``strict`` if ``True``. Comprehensive enough to work as a data
-        dictionary or to share a contract's shape without importing the Python class —
-        see :meth:`.ContractSchema.from_dict`.
+        set, ``strict`` if ``True``, and ``key``/``unique_together`` if declared.
+        Comprehensive enough to work as a data dictionary or to share a contract's shape
+        without importing the Python class — see :meth:`.ContractSchema.from_dict`.
 
         ``@check`` methods and ``Field(condition=...)`` lambdas are arbitrary Python
         code and can never be serialized — only their description text is included,
@@ -24,7 +24,8 @@ class _DocumentationMixin:
         Returns:
             A dict shaped ``{"contract": ..., "fields": {...}, "checks": {...}}``,
             with ``"min_rows"``/``"max_rows"`` included only when set and
-            ``"strict": True`` only when the contract is strict.
+            ``"strict": True`` only when the contract is strict, and ``"key"`` /
+            ``"unique_together"`` only when declared.
         """
         fields: dict[str, dict] = {}
         for name, field in cls._fields.items():
@@ -49,6 +50,8 @@ class _DocumentationMixin:
                 entry["condition_description"] = field.condition_description
             if field.unique:
                 entry["unique"] = True
+            if field.blank_is_null:
+                entry["blank_is_null"] = True
             if field.severity is not Severity.ERROR:
                 entry["severity"] = field.severity.value
             if field.max_failure_pct is not None:
@@ -72,6 +75,10 @@ class _DocumentationMixin:
             result["max_rows"] = cls.max_rows
         if cls.strict:
             result["strict"] = True
+        if cls.key:
+            result["key"] = list(cls.key)
+        if cls.unique_together:
+            result["unique_together"] = [list(group) for group in cls.unique_together]
         return result
 
     @classmethod
@@ -85,6 +92,7 @@ class _DocumentationMixin:
 
         One line per field (name, type, nullability, active constraints,
         description, metadata), followed by ``min_rows``/``max_rows`` if set, a
+        ``Key:`` and ``Unique together:`` lines if declared, a
         ``Strict:`` line if the contract is strict, and a
         ``Checks:`` section listing every ``@check``'s name and description, if any.
         The exact column alignment isn't part of this method's contract — only the
@@ -116,6 +124,8 @@ class _DocumentationMixin:
                 constraints.append(f"condition={field.condition_description!r}")
             if field.unique:
                 constraints.append("unique")
+            if field.blank_is_null:
+                constraints.append("blank_is_null")
             if field.severity is not Severity.ERROR:
                 constraints.append(f"severity={field.severity}")
             if field.max_failure_pct is not None:
@@ -144,6 +154,13 @@ class _DocumentationMixin:
                 bounds.append(f"max_rows={cls.max_rows}")
             lines.append("")
             lines.append(f"Rows: {', '.join(bounds)}")
+
+        if cls.key or cls.unique_together:
+            lines.append("")
+            if cls.key:
+                lines.append(f"Key: {', '.join(cls.key)}")
+            for group in cls.unique_together:
+                lines.append(f"Unique together: ({', '.join(group)})")
 
         if cls.strict:
             lines.append("")

@@ -22,6 +22,8 @@ class _ValidationMixin:
     min_rows: int | None = None
     max_rows: int | None = None
     strict: bool = False
+    key: tuple[str, ...] = ()
+    unique_together: tuple[tuple[str, ...], ...] = ()
 
     def _report_name(self) -> str:
         return type(self).__name__

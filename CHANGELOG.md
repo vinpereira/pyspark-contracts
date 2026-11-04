@@ -2,6 +2,49 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.12.0] - 2026-11-04
+
+Row-level outcomes: what a job needs to act on bad rows, not just detect them. Everything is
+additive and off by default — a contract that uses none of it behaves exactly as in 0.11.1.
+
+### Added
+- **`split(df)`** returns `valid, rejected` (a `SplitResult`), so a job can quarantine bad rows
+  and carry on with the rest. `rejected` has the original columns plus `_violations`, an
+  `array<struct<kind, column, constraint>>` of every rule the row broke (`errors_column=`
+  renames it). It's lazy — no Spark action, no logging — and uses the same predicates as
+  `validate()`, so per-rule counts match. Only `error`-severity rules reject rows; `severity=
+  "warn"` rules never do, and `max_failure_pct` is ignored (it needs a count of the whole
+  DataFrame). `@check` methods aren't evaluated (a `UserWarning` names them) and
+  `min_rows`/`max_rows` are ignored. A structural problem (missing, mistyped, or unexpected
+  columns) raises `ContractViolationError`. With `PYSPARK_CONTRACTS_ENABLED=false` every row is
+  valid. Also on `ContractSchema`.
+- **`key = [...]`** on a contract names the columns that identify a row. Violations of row-level
+  constraints then carry `Violation.sample_keys`, one `{column: value}` dict per entry of
+  `sample_values`, so you can tell *which record* failed. Not set for `unique`,
+  `unique_together`, `@check`, structural, or row-count violations, and never part of the log
+  message or `summary()`.
+- **`unique_together = [("a", "b")]`** asserts a composite key is unique. Like `unique`, a
+  combination containing a null is never a duplicate. Reported as `duplicate_value` with
+  `column` unset, `constraint="unique_together=(a, b)"`, and one dict per duplicated combination
+  in `sample_values`. Always an error, evaluated after the field constraints, one extra Spark
+  action per group.
+- **`Field(column=...)`** gives an attribute the real DataFrame column it stands for, so a name
+  that isn't a valid Python identifier (e.g. `accumulatedData.duration`) can be a class
+  attribute. Reports, `to_dict()`, and `describe()` use the real name.
+- **`Field(blank_is_null=True)`** makes `nullable=False` also reject empty and whitespace-only
+  strings (tabs, newlines, and non-breaking spaces included), reported as a `null_violation`.
+  Requires `nullable=False` and a `StringType`.
+- `key`, `unique_together`, and `blank_is_null` round-trip through `to_dict()` and
+  `ContractSchema`, and show in `describe()`. A `key` or `unique_together` that names an
+  undeclared field is rejected when the class is created (`TypeError`; `ValueError` from
+  `ContractSchema.from_dict`).
+
+### Changed
+- `Violation` has a new trailing `sample_keys` field; code constructing a `Violation` with
+  positional arguments past `sample_values` must switch to keywords.
+- The README's section on dotted column names uses `Field(column=...)` instead of building the
+  contract with `type(...)`.
+
 ## [0.11.1] - 2026-10-24
 
 ### Fixed

@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from pyspark.sql import Column
-from pyspark.sql.types import DataType
+from pyspark.sql.types import DataType, StringType
 
 from pyspark_contracts._report import Severity
 
@@ -78,6 +78,17 @@ class Field:
             reported as a ``"warn"`` violation instead of an error, so it stays
             visible without aborting the job. Compared against the exact share, not
             the rounded ``row_pct``.
+        column: The DataFrame column this field stands for, when it differs from the
+            attribute name — typically a name that isn't a valid Python identifier, like
+            ``"accumulatedData.duration"``. Reports, ``to_dict()``, and the other
+            settings of the contract (``key``, ``unique_together``) all use this real
+            column name. Two attributes can't declare the same column, but a subclass
+            can override an inherited field by declaring its column again.
+        blank_is_null: ``True`` makes the ``nullable=False`` check also fail for strings
+            that are empty or whitespace-only (any Unicode whitespace), reported as a
+            ``null_violation``. Only affects that check — a blank string still counts
+            for ``min_length``, ``regex``, and the rest. Requires ``nullable=False`` and a
+            ``StringType``, so it can't silently do nothing.
     """
 
     def __init__(
@@ -98,12 +109,25 @@ class Field:
         unique: bool = False,
         severity: str = "error",
         max_failure_pct: float | None = None,
+        column: str | None = None,
+        blank_is_null: bool = False,
     ) -> None:
         if max_failure_pct is not None and not 0 <= max_failure_pct <= 100:
             raise ValueError(
                 f"Field() max_failure_pct must be a percentage between 0 and 100, "
                 f"got {max_failure_pct!r}"
             )
+        if column is not None and not column:
+            raise ValueError("Field() column must not be empty")
+        if blank_is_null:
+            if nullable:
+                raise ValueError(
+                    "Field() blank_is_null only applies to required fields; set nullable=False"
+                )
+            if not isinstance(dtype, StringType):
+                raise ValueError(
+                    f"Field() blank_is_null only applies to StringType fields, got {dtype!r}"
+                )
         self.dtype = dtype
         self.nullable = nullable
         self.min_value = min_value
@@ -119,6 +143,8 @@ class Field:
         self.unique = unique
         self.severity = _severity(severity, "Field()")
         self.max_failure_pct = max_failure_pct
+        self.column = column
+        self.blank_is_null = blank_is_null
 
     def _has_quality_constraints(self) -> bool:
         """Whether this field declares at least one row-level data constraint.

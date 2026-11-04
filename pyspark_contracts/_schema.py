@@ -7,23 +7,30 @@ from pyspark.sql.types import StructType
 
 from pyspark_contracts._custom_checks import _CustomCheckMixin
 from pyspark_contracts._dataset_checks import _DatasetCheckMixin
+from pyspark_contracts._declared import normalize_key, normalize_unique_together
 from pyspark_contracts._dtype_json import dtype_from_json
 from pyspark_contracts._field import Field
 from pyspark_contracts._quality_checks import _QualityCheckMixin
 from pyspark_contracts._schema_checks import _SchemaCheckMixin
+from pyspark_contracts._split import _SplitMixin
 from pyspark_contracts._struct_type import fields_to_struct_type
 from pyspark_contracts._validation import _ValidationMixin
 
 
 class ContractSchema(
-    _ValidationMixin, _SchemaCheckMixin, _QualityCheckMixin, _CustomCheckMixin, _DatasetCheckMixin
+    _ValidationMixin,
+    _SchemaCheckMixin,
+    _QualityCheckMixin,
+    _CustomCheckMixin,
+    _DatasetCheckMixin,
+    _SplitMixin,
 ):
     """Validates a DataFrame from an exported schema, without importing the original
     :class:`.Contract` subclass.
 
     Reconstructs everything :meth:`.Contract.to_dict` captured as data — types,
     nullability, and every quality constraint (including ``min_rows``/``max_rows``
-    and ``strict``) —
+    ``strict``, ``key``, and ``unique_together``) —
     and shares the exact same ``validate()`` implementation ``Contract`` uses, so a
     reloaded schema enforces the same rules the original class did. It cannot
     reconstruct ``@check`` methods or ``Field(condition=...)`` lambdas, since those are
@@ -42,6 +49,8 @@ class ContractSchema(
         min_rows: int | None = None,
         max_rows: int | None = None,
         strict: bool = False,
+        key: tuple[str, ...] = (),
+        unique_together: tuple[tuple[str, ...], ...] = (),
     ) -> None:
         self._name = contract_name
         self._fields = fields
@@ -49,6 +58,8 @@ class ContractSchema(
         self.min_rows = min_rows
         self.max_rows = max_rows
         self.strict = strict
+        self.key = key
+        self.unique_together = unique_together
 
     def _report_name(self) -> str:
         return self._name
@@ -100,6 +111,7 @@ class ContractSchema(
                 description=entry.get("description"),
                 metadata=entry.get("metadata"),
                 unique=entry.get("unique", False),
+                blank_is_null=entry.get("blank_is_null", False),
                 severity=entry.get("severity", "error"),
                 max_failure_pct=entry.get("max_failure_pct"),
             )
@@ -118,12 +130,23 @@ class ContractSchema(
                 stacklevel=2,
             )
 
+        owner = schema_dict["contract"]
+        try:
+            key = normalize_key(owner, schema_dict.get("key", ()), fields)
+            unique_together = normalize_unique_together(
+                owner, schema_dict.get("unique_together", ()), fields
+            )
+        except TypeError as error:
+            raise ValueError(str(error)) from None
+
         return cls(
             schema_dict["contract"],
             fields,
             min_rows=schema_dict.get("min_rows"),
             max_rows=schema_dict.get("max_rows"),
             strict=schema_dict.get("strict", False),
+            key=key,
+            unique_together=unique_together,
         )
 
     @classmethod

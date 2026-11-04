@@ -246,6 +246,112 @@ Checked right after the row count is known, so they apply under `DATA_ONLY` and
 `@check`/`condition`, `min_rows`/`max_rows` are plain data, so they round-trip through
 `to_dict()`/`ContractSchema` with no "can't reconstruct" warning.
 
+## Key columns
+
+`sample_values` says what was wrong; a `key` says *which record*. Declare the columns that
+identify a row and every row-level violation lists them next to the bad values:
+
+```python
+from pyspark.sql.types import DateType, FloatType, StringType
+from pyspark_contracts import Contract, Field
+
+class OdometerContract(Contract):
+    key = ["vin", "readingDate"]
+
+    vin = Field(StringType(), nullable=False)
+    readingDate = Field(DateType(), nullable=False)
+    odometerEnd = Field(FloatType(), min_value=0)
+```
+
+```json
+{
+  "kind": "value_out_of_range",
+  "column": "odometerEnd",
+  "sample_values": [-1.0, -5.5],
+  "sample_keys": [
+    {"vin": "1HGCM82633A004352", "readingDate": "2026-01-03"},
+    {"vin": "JH4KA8260MC000000", "readingDate": "2026-01-04"}
+  ]
+}
+```
+
+`sample_keys` lines up with `sample_values`, entry by entry. Key columns must be declared fields.
+They're not added for `unique`/`unique_together` (the sample already names the group), `@check`
+(samples are whole rows), or structural violations. Keys are identifiers, so like sample values
+they only appear in the structured fields — never in the log message or `summary()`.
+
+## Uniqueness across columns
+
+`Field(unique=True)` checks one column. For a composite key, such as one row per customer and
+reference date, declare `unique_together`:
+
+```python
+class OrderContract(Contract):
+    unique_together = [("customer_nr", "ref_date")]
+
+    customer_nr = Field(StringType(), nullable=False)
+    ref_date = Field(DateType(), nullable=False)
+```
+
+Like `unique`, a combination containing a null is never a duplicate, and `failure_count` counts
+every row in a duplicate group. The violation is a `duplicate_value` with `column` unset,
+`constraint="unique_together=(customer_nr, ref_date)"`, and `sample_values` as one
+`{"customer_nr": ..., "ref_date": ...}` per duplicated combination. It's always an error, runs
+after the field constraints, and costs one extra Spark action per group (a `groupBy`, like
+`unique`). Every group needs at least two declared columns.
+
+## Splitting valid and rejected rows
+
+`validate()` tells you a DataFrame has bad rows. `split()` takes them out, so a job can keep
+the bad rows for review and carry on with the rest:
+
+```python
+from pyspark.sql.types import DateType, StringType
+from pyspark_contracts import Contract, Field
+
+class OrderContract(Contract):
+    unique_together = [("customer_nr", "ref_date")]
+
+    customer_nr = Field(StringType(), nullable=False, blank_is_null=True)
+    ref_date = Field(DateType(), nullable=False)
+    status = Field(StringType(), allowed_values=["open", "closed"])
+
+valid, rejected = OrderContract().split(df)
+
+rejected.write.mode("append").saveAsTable("quarantine.orders")
+process(valid)
+```
+
+`valid` has the original columns. `rejected` has them plus `_violations`, an array of every rule
+the row broke, in declaration order:
+
+```
+customer_nr  ref_date    status    _violations
+C1           2026-01-01  open      [{duplicate_value, null, unique_together=(customer_nr, ref_date)}]
+C1           2026-01-01  closed    [{duplicate_value, null, unique_together=(customer_nr, ref_date)}]
+             2026-01-02  paused    [{null_violation, customer_nr, nullable, blank counts as null},
+                                    {value_not_allowed, status, allowed_values=['open', 'closed']}]
+```
+
+Each entry is a `struct<kind, column, constraint>`; `column` is null for `unique_together`. Use
+`errors_column="dq_errors"` to name the column something else.
+
+- **Same rules as `validate()`.** It uses the same predicates, so a rule that's null for a row
+  (like `min_value` on a null) doesn't reject it, and the per-rule counts match `validate()`'s.
+- **Only errors reject rows.** A rule with `severity="warn"` never takes a row out of `valid`.
+  `max_failure_pct` is ignored — it's a judgment about the whole DataFrame, which would need a
+  count; use `validate()` for tolerances.
+- **`@check` methods aren't evaluated.** They take the whole DataFrame, so their result can't be
+  attributed to input rows; `split()` emits a `UserWarning` naming them. `min_rows`/`max_rows`
+  are ignored too.
+- **Structural problems raise.** Missing, mistyped, or (with `strict`) unexpected columns make
+  row rules meaningless, so `split()` raises `ContractViolationError`.
+- **Lazy.** `split()` runs no Spark action and logs nothing. `valid` and `rejected` are two plans
+  over `df`, so `df.cache()` first if reading it is expensive. Each `unique`/`unique_together`
+  rule adds a shuffle.
+
+Call `validate(df, mode="soft")` as well when you want the report and the log line.
+
 ## Strict contracts
 
 By default a DataFrame may carry columns the contract doesn't declare. Set `strict = True` to
@@ -308,25 +414,43 @@ violations, then `… and N more`.
 | `unique` | `bool` | Default `False`. Set `True` to fail when the column has duplicate (non-null) values. |
 | `severity` | `str` | `"error"` (default) or `"warn"`, for every data constraint on the field. |
 | `max_failure_pct` | `float` | Percentage of rows (0–100) a constraint may fail on and still be only a warning. |
+| `column` | `str` | The real DataFrame column, when it isn't a valid Python name (e.g. `"a.b"`). |
+| `blank_is_null` | `bool` | With `nullable=False` on a string, also fail empty and whitespace-only values. |
 
 ## Columns with dots in their name
 
-Names like `accumulatedData.duration` (what Glue's `relationalize` produces) are validated like
-any other column: the library quotes every column it references, so the dot isn't read as a
-nested field. A class attribute can't contain a dot, so declare such a contract from a
-namespace dict, or reload it from its exported dict:
+Names like `accumulatedData.duration` (what Glue's `relationalize` produces) can't be class
+attributes, so give the attribute the real column name with `column=`:
 
 ```python
 from pyspark.sql.types import LongType
 from pyspark_contracts import Contract, Field
 
-MyContract = type("MyContract", (Contract,), {
-    "accumulatedData.duration": Field(LongType(), nullable=False, min_value=0),
-})
+class TelemetryContract(Contract):
+    duration = Field(LongType(), nullable=False, min_value=0, column="accumulatedData.duration")
 ```
 
-A `condition` lambda receives the name as declared, so quote it in `F.col` if it has dots:
+Reports, `to_dict()` and `describe()` use the real name (`accumulatedData.duration`), and the
+library quotes every column it references, so the dot isn't read as a nested field. A
+`condition` lambda receives the name as declared, so quote it in `F.col` if it has dots:
 ``F.col(f"`{f}`")``.
+
+## Blank strings
+
+`nullable=False` accepts `""` and `"   "`. For text files where an empty field means "missing",
+add `blank_is_null=True` and the `nullable` check fails for empty and whitespace-only strings
+too (tabs, newlines, and non-breaking spaces included):
+
+```python
+from pyspark.sql.types import StringType
+from pyspark_contracts import Contract, Field
+
+class CustomerContract(Contract):
+    name = Field(StringType(), nullable=False, blank_is_null=True)
+```
+
+It only changes that check — a blank string still counts for `min_length`, `regex`, and the
+rest — and it needs `nullable=False` on a string column.
 
 ## Documenting a contract
 
@@ -472,7 +596,7 @@ nulls = [v for v in report.violations if v.kind == ViolationKind.NULL_VIOLATION]
 | `value_not_allowed` | Value not in `allowed_values` list |
 | `condition_failed` | `Field(condition=...)` expression evaluated to false |
 | `check_failed` | `@check`-decorated method returned non-empty failing rows (named in `check`, not `column`) |
-| `duplicate_value` | `Field(unique=True)` column has repeated (non-null) values |
+| `duplicate_value` | `Field(unique=True)` column, or a `unique_together` group, has repeated (non-null) values |
 | `row_count_out_of_range` | DataFrame row count below `min_rows` or above `max_rows` |
 | `unexpected_column` | `strict = True` contract, and the DataFrame has a column it doesn't declare |
 

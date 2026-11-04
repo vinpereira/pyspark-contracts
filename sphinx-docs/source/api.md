@@ -60,6 +60,12 @@ Generated from the docstrings in `pyspark_contracts`.
    :members:
 ```
 
+## SplitResult
+
+```{eval-rst}
+.. autoclass:: pyspark_contracts.SplitResult
+```
+
 ## ViolationKind
 
 ```{eval-rst}
