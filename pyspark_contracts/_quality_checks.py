@@ -25,13 +25,20 @@ class _RowRule:
     severity: Severity = Severity.ERROR
     max_failure_pct: float | None = None
     columns: tuple[str, ...] = ()
+    check: str | None = None
 
     def severity_for(self, fail: int, row_count: int) -> Severity:
         """This rule's severity for ``fail`` failing rows out of ``row_count``: a warning
         when within ``max_failure_pct`` (compared unrounded), else its own severity."""
-        if self.max_failure_pct is not None and fail / row_count * 100 <= self.max_failure_pct:
-            return Severity.WARN
-        return self.severity
+        return _severity_for(self.severity, self.max_failure_pct, fail, row_count)
+
+
+def _severity_for(
+    severity: Severity, max_failure_pct: float | None, fail: int, row_count: int
+) -> Severity:
+    if max_failure_pct is not None and fail / row_count * 100 <= max_failure_pct:
+        return Severity.WARN
+    return severity
 
 
 # A string that is empty or whitespace-only. (?U) makes \s Unicode-aware: Spark's trim()

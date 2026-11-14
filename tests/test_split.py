@@ -87,7 +87,8 @@ def test_valid_keeps_the_original_columns_and_rejected_adds_the_errors_column(sp
     assert rejected.columns == ["vin", "day", "km", "note", "_violations"]
     errors_type = rejected.schema["_violations"].dataType
     assert (
-        errors_type.simpleString() == "array<struct<kind:string,column:string,constraint:string>>"
+        errors_type.simpleString()
+        == "array<struct<kind:string,column:string,check:string,constraint:string>>"
     )
 
 

@@ -114,13 +114,14 @@ class OdometerContract(Contract):
     note = Field(StringType(), max_length=200, severity="warn")
 
     @check("delta_km should be under a plausible daily max", severity="warn")
-    def plausible_delta(self, df: DataFrame) -> DataFrame:
-        return df.filter(F.col("odometerEnd") - F.col("odometerStart") > 2000)
+    def plausible_delta(self, df: DataFrame):
+        return F.col("odometerEnd") - F.col("odometerStart") > 2000
 ```
 
 - `severity` on a `Field` applies to all of its data constraints; on `@check`, to that check.
 - `max_failure_pct` is a share of rows (0–100, like `row_pct`): a constraint failing on at most
-  that share is a warning instead of an error. It's compared against the exact share, so
+  that share is a warning instead of an error. `@check(..., max_failure_pct=0.5)` works the same
+  way for a check. It's compared against the exact share, so
   `row_pct`'s rounding can't flip it.
 - Structural violations (`missing_column`, `type_mismatch`, `unexpected_column`) and
   `row_count_out_of_range` are always errors.
@@ -143,7 +144,7 @@ for v in report.warnings:
 from pyspark_contracts import Contract, Field, check
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import DoubleType, TimestampType
+from pyspark.sql.types import DoubleType, StringType, TimestampType
 
 class FinalDfContract(Contract):
     end_dt   = Field(TimestampType(), nullable=False)
@@ -151,20 +152,38 @@ class FinalDfContract(Contract):
                      condition=lambda f: F.col(f) < F.col("end_dt"),
                      condition_description="start_dt must precede end_dt")
 
+    vin      = Field(StringType(), nullable=False)
     delta_km = Field(DoubleType(), nullable=False)
 
     @check("delta_km must be non-negative (no regression)")
-    def no_regression(self, df: DataFrame) -> DataFrame:
-        return df.filter(F.col("delta_km") < 0)
+    def no_regression(self, df: DataFrame):
+        return F.col("delta_km") < 0
 
     @check("delta_km must not exceed daily threshold")
-    def no_abnormal_jump(self, df: DataFrame, threshold: float = 1000.0) -> DataFrame:
-        return df.filter(F.col("delta_km") > threshold)
+    def no_abnormal_jump(self, df: DataFrame, threshold: float = 1000.0):
+        return F.col("delta_km") > threshold
+
+    @check("at most one reading per vin per day")
+    def one_reading_per_day(self, df: DataFrame) -> DataFrame:
+        per_day = df.groupBy("vin", F.to_date("end_dt").alias("day")).count()
+        return per_day.filter(F.col("count") > 1)
 ```
 
-A `@check` method receives the full DataFrame and returns the **failing rows** — an empty
-result means it passed. Extra parameters (`threshold`) are supplied via `validate()` and
-routed to the checks that declare them:
+A `@check` method describes the **failing rows**, in one of two ways:
+
+- **A condition** (a `Column`), like `F.col("delta_km") < 0` — what you'd pass to
+  `df.filter(...)`. It's evaluated in the same single scan as the field constraints, so a passing
+  check costs no extra Spark action, and [`split()`](#splitting-valid-and-rejected-rows) can
+  reject rows with it. Use this whenever the rule is a per-row condition.
+- **A DataFrame** of the failing rows, for rules that need a join, a window, or an aggregation,
+  like `one_reading_per_day`. It costs one Spark action, and `split()` can't attribute it to rows.
+
+Mind the polarity: a `@check` condition selects the rows that **fail**, while
+`Field(condition=...)` describes the rows that **pass**. A row where the condition is null
+doesn't fail either way.
+
+Extra parameters (`threshold`) are supplied via `validate()` and routed to the checks that
+declare them; one that no check accepts raises `TypeError`:
 
 ```python
 report = FinalDfContract().validate(df, mode="soft", threshold=2000.0)
@@ -327,13 +346,14 @@ the row broke, in declaration order:
 
 ```
 customer_nr  ref_date    status    _violations
-C1           2026-01-01  open      [{duplicate_value, null, unique_together=(customer_nr, ref_date)}]
-C1           2026-01-01  closed    [{duplicate_value, null, unique_together=(customer_nr, ref_date)}]
-             2026-01-02  paused    [{null_violation, customer_nr, nullable, blank counts as null},
-                                    {value_not_allowed, status, allowed_values=['open', 'closed']}]
+C1           2026-01-01  open      [{duplicate_value, null, null, unique_together=(customer_nr, ref_date)}]
+C1           2026-01-01  closed    [{duplicate_value, null, null, unique_together=(customer_nr, ref_date)}]
+             2026-01-02  paused    [{null_violation, customer_nr, null, nullable, blank counts as null},
+                                    {value_not_allowed, status, null, allowed_values=['open', 'closed']}]
 ```
 
-Each entry is a `struct<kind, column, constraint>`; `column` is null for `unique_together`. Use
+Each entry is a `struct<kind, column, check, constraint>`: `column` is null for
+`unique_together` and checks, and `check` holds a check's name (null otherwise). Use
 `errors_column="dq_errors"` to name the column something else.
 
 - **Same rules as `validate()`.** It uses the same predicates, so a rule that's null for a row
@@ -341,9 +361,11 @@ Each entry is a `struct<kind, column, constraint>`; `column` is null for `unique
 - **Only errors reject rows.** A rule with `severity="warn"` never takes a row out of `valid`.
   `max_failure_pct` is ignored — it's a judgment about the whole DataFrame, which would need a
   count; use `validate()` for tolerances.
-- **`@check` methods aren't evaluated.** They take the whole DataFrame, so their result can't be
-  attributed to input rows; `split()` emits a `UserWarning` naming them. `min_rows`/`max_rows`
-  are ignored too.
+- **Checks that return a condition count; checks that return a DataFrame don't.** A condition is
+  per row, so an error-level one rejects rows like any field rule. A DataFrame of failing rows
+  can't be attributed back to the input, so those checks aren't evaluated and `split()` emits a
+  `UserWarning` naming them. Pass the checks' parameters to `split()` as you would to
+  `validate()`. `min_rows`/`max_rows` are ignored.
 - **Structural problems raise.** Missing, mistyped, or (with `strict`) unexpected columns make
   row rules meaningless, so `split()` raises `ContractViolationError`.
 - **Lazy.** `split()` runs no Spark action and logs nothing. `valid` and `rejected` are two plans

@@ -23,12 +23,16 @@ Cut the Spark actions that are left after v0.10.0's single-pass validation.
   fetched in a single pass over the data instead of one Spark action per failing
   constraint. Matters most for rare failures on large, uncached DataFrames, where each of
   those actions reads almost the whole input to find a handful of rows.
+- **Condition checks in `split()`.** A check that returns a condition is row-level, so
+  `split()` can reject rows with it — today it skips every `@check`.
+- **`max_failure_pct` on `@check`**, the same tolerance `Field` has.
+- **Export `Violation`** from the package root, and test the Spark 4.1 runtime in CI.
 
 ## v1.0.0 — Stable API
 
-After v0.13.0, v1.0.0 commits to the public API — `Contract`, `Field`, `@check`,
-`@check_input`, `@check_output`, `ValidationDepth`, `ContractSchema`, `ViolationReport`,
-`ViolationKind`, `Severity`, `ContractViolationError`, and the JSON log format: no breaking
+After v0.13.0 and a trial run in a production pipeline, v1.0.0 commits to the public API — `Contract`, `Field`, `@check`,
+`@check_input`, `@check_output`, `ValidationDepth`, `ContractSchema`, `ViolationReport`, `Violation`,
+`SplitResult`, `ViolationKind`, `Severity`, `ContractViolationError`, and the JSON log format: no breaking
 changes without a major version bump.
 
 ## Non-goals

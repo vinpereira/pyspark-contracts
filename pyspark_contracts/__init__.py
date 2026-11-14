@@ -8,6 +8,7 @@ from pyspark_contracts._field import Field
 from pyspark_contracts._report import (
     ContractViolationError,
     Severity,
+    Violation,
     ViolationKind,
     ViolationReport,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "ContractViolationError",
     "Severity",
     "SplitResult",
+    "Violation",
     "ViolationKind",
     "ViolationReport",
     "__version__",
