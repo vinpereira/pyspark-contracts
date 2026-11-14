@@ -16,8 +16,12 @@ def check(
       It's evaluated in the same single scan as the field constraints, so a passing check
       costs no extra Spark action, and :meth:`.Contract.split` can reject rows with it.
       Prefer this whenever the rule is a per-row condition.
-    - **A** ``DataFrame`` of the failing rows, for rules that need joins, windows, or
-      aggregations. Costs one Spark action, and ``split()`` can't attribute it to rows.
+    - **A** ``DataFrame`` of the failing rows, for rules that need another DataFrame (a join)
+      or an aggregation. Costs one Spark action, and ``split()`` can't attribute it to rows.
+      Its ``failure_count`` is the number of rows it returns, so return input rows rather
+      than aggregates — or use a window condition, which flags each row of a group.
+
+    Window functions are fine in a condition.
 
     A row where the condition is null doesn't fail, as with ``filter``. Note the polarity is
     the opposite of ``Field(condition=...)``, which describes the rows that *pass*.

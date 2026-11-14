@@ -49,6 +49,8 @@ _BLANK = r"(?U)\A\s*\z"
 # Helper columns, named so they can't collide with a user's column
 _DUPLICATE_COUNT = "__pyspark_contracts_duplicate_count"
 _SAMPLE_RULE = "__pyspark_contracts_sample_rule"
+_FLAG = "__pyspark_contracts_flag"
+_ROW = "__pyspark_contracts_row"
 _SAMPLE_RANK = "__pyspark_contracts_sample_rank"
 
 # Samples of the rules failing on at most this many rows are fetched together in one scan. A
@@ -194,9 +196,15 @@ class _QualityCheckMixin:
         rules get ``None``.
         """
         counted = [i for i, rule in enumerate(rules) if rule.fail is not None]
-        row = df.agg(
+        # Each predicate becomes a column first and is counted after: Spark rejects a window
+        # function inside an aggregate, but accepts it in a projection. For plain predicates the
+        # optimizer folds the projection into the aggregation, so the plan is unchanged.
+        flags = df.select(
+            F.lit(1).alias(_ROW), *[rules[i].fail.alias(f"{_FLAG}{i}") for i in counted]
+        )
+        row = flags.agg(
             F.count(F.lit(1)).alias("_rows"),
-            *[F.count(F.when(rules[i].fail, 1)).alias(f"_rule{i}") for i in counted],
+            *[F.count(F.when(F.col(f"{_FLAG}{i}"), 1)).alias(f"_rule{i}") for i in counted],
         ).collect()[0]
 
         fail_counts: list[int | None] = [None] * len(rules)
@@ -251,16 +259,33 @@ class _QualityCheckMixin:
             batched = []
         for item in pending:
             if item not in batched:
-                rows = df.filter(item.fail).limit(_SAMPLES).collect()
+                # Filtered through a column, not filter(predicate): a predicate may use a window
+                # function, which Spark only accepts in a projection
+                failing = df.withColumn(_FLAG, item.fail).filter(F.col(_FLAG)).drop(_FLAG)
+                rows = failing.limit(_SAMPLES).collect()
                 self._set_samples(item, rows, df.columns)
         if batched:
             self._fill_batched_samples(df, batched)
 
     def _fill_batched_samples(self, df: DataFrame, batched: list[_PendingSample]) -> None:
         # One row per (failing row, rule it breaks), then the first five per rule
-        flags = F.array(*[F.when(item.fail, F.lit(i)) for i, item in enumerate(batched)])
-        hits = df.filter(reduce(or_, [item.fail for item in batched])).withColumn(
-            _SAMPLE_RULE, F.explode(F.filter(flags, lambda flag: flag.isNotNull()))
+        # Each predicate is projected as its own column (a window function is only allowed in
+        # a projection), then rows are filtered by the OR of those columns. For plain predicates
+        # the optimizer inlines the projection into the filter, so only failing rows go on to
+        # build the array of broken rules.
+        flag_names = [f"{_FLAG}{i}" for i in range(len(batched))]
+        projected = df.select(
+            "*", *[item.fail.alias(name) for item, name in zip(batched, flag_names)]
+        )
+        any_broken = reduce(or_, [F.col(name) for name in flag_names])
+        broken = F.filter(
+            F.array(*[F.when(F.col(name), F.lit(i)) for i, name in enumerate(flag_names)]),
+            lambda flag: flag.isNotNull(),
+        )
+        hits = (
+            projected.filter(any_broken)
+            .withColumn(_SAMPLE_RULE, F.explode(broken))
+            .drop(*flag_names)
         )
         ranking = Window.partitionBy(_SAMPLE_RULE).orderBy(F.lit(1))
         sampled = hits.withColumn(_SAMPLE_RANK, F.row_number().over(ranking)).filter(

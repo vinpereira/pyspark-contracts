@@ -47,9 +47,12 @@ class ViolationKind(_StrEnum):
     UNEXPECTED_COLUMN = "unexpected_column"
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Violation:
     """One failed constraint from a :meth:`.Contract.validate` run.
+
+    Construct it with keyword arguments only (``Violation(kind=..., column=...)``), so new
+    fields can be added without breaking anyone.
 
     Attributes:
         kind: The violation type, a :class:`ViolationKind`. A plain string such as
@@ -79,7 +82,8 @@ class Violation:
             (``row_count_out_of_range``) violations, which aren't about a subset of
             rows.
         failure_count: Number of rows that failed this constraint. Same
-            applicability as ``row_pct``.
+            applicability as ``row_pct``. For a ``@check`` that returns a DataFrame, it's
+            the number of rows that DataFrame has — not input rows, if the check aggregates.
         sample_values: Up to 5 offending values, for quick diagnosis. For
             ``check_failed``, these are full rows (as ``dict``) rather than single
             column values, since a ``@check`` can span multiple columns. For a

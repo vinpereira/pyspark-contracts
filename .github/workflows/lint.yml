@@ -13,3 +13,5 @@ jobs:
       - uses: astral-sh/setup-uv@v3
       - run: uv run ruff format --check pyspark_contracts/ tests/ benchmarks/
       - run: uv run ruff check pyspark_contracts/ tests/ benchmarks/
+      # The package ships py.typed: code written the way the docs show must type-check
+      - run: uv run mypy --follow-imports=silent --ignore-missing-imports tests/typing/

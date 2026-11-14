@@ -142,7 +142,7 @@ for v in report.warnings:
 
 ```python
 from pyspark_contracts import Contract, Field, check
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType, StringType, TimestampType
 
@@ -164,9 +164,13 @@ class FinalDfContract(Contract):
         return F.col("delta_km") > threshold
 
     @check("at most one reading per vin per day")
-    def one_reading_per_day(self, df: DataFrame) -> DataFrame:
-        per_day = df.groupBy("vin", F.to_date("end_dt").alias("day")).count()
-        return per_day.filter(F.col("count") > 1)
+    def one_reading_per_day(self, df: DataFrame):
+        same_day = Window.partitionBy("vin", F.to_date("end_dt"))
+        return F.count(F.lit(1)).over(same_day) > 1
+
+    @check("every vin must be in the fleet table")
+    def known_vehicle(self, df: DataFrame, fleet: DataFrame) -> DataFrame:
+        return df.join(fleet, "vin", "left_anti")
 ```
 
 A `@check` method describes the **failing rows**, in one of two ways:
@@ -174,19 +178,26 @@ A `@check` method describes the **failing rows**, in one of two ways:
 - **A condition** (a `Column`), like `F.col("delta_km") < 0` — what you'd pass to
   `df.filter(...)`. It's evaluated in the same single scan as the field constraints, so a passing
   check costs no extra Spark action, and [`split()`](#splitting-valid-and-rejected-rows) can
-  reject rows with it. Use this whenever the rule is a per-row condition.
-- **A DataFrame** of the failing rows, for rules that need a join, a window, or an aggregation,
-  like `one_reading_per_day`. It costs one Spark action, and `split()` can't attribute it to rows.
+  reject rows with it. Window functions are fine (`one_reading_per_day`). Use this whenever the
+  rule can be written as a condition on each row.
+- **A DataFrame** of the failing rows, for rules that need another DataFrame or an aggregation,
+  like `known_vehicle`. It costs one Spark action, and `split()` can't attribute it to rows.
+
+`failure_count` and `row_pct` count the rows a check flags. For a DataFrame check that's
+whatever it returns, so return **input rows**, not aggregates: a check returning one row per
+duplicated group reports the number of groups, while `row_pct` is still divided by the
+DataFrame's row count. When the rule is about groups, a window condition like
+`one_reading_per_day` flags every row of each group instead.
 
 Mind the polarity: a `@check` condition selects the rows that **fail**, while
 `Field(condition=...)` describes the rows that **pass**. A row where the condition is null
 doesn't fail either way.
 
-Extra parameters (`threshold`) are supplied via `validate()` and routed to the checks that
-declare them; one that no check accepts raises `TypeError`:
+Extra parameters (`threshold`, `fleet`) are supplied via `validate()` and routed to the checks
+that declare them; one that no check accepts raises `TypeError`:
 
 ```python
-report = FinalDfContract().validate(df, mode="soft", threshold=2000.0)
+report = FinalDfContract().validate(df, mode="soft", threshold=2000.0, fleet=fleet_df)
 ```
 
 Both `condition` and `@check` are skipped entirely when the DataFrame has a missing column
@@ -647,3 +658,33 @@ OdometerContract().validate(df)
 ```
 
 See [BENCHMARKS.md](https://github.com/vinpereira/pyspark-contracts/blob/main/BENCHMARKS.md) for measured overhead.
+
+## Compatibility and versioning
+
+**Supported:** Python 3.10–3.14 and PySpark 3.3–4.x, in classic mode and Spark Connect (PySpark
+4.x). The combinations CI runs are listed in
+[`.github/workflows/test.yml`](https://github.com/vinpereira/pyspark-contracts/blob/main/.github/workflows/test.yml).
+Support for a Python or PySpark version is dropped only in a minor release, noted in the
+CHANGELOG, once it's end-of-life upstream and no current AWS Glue or Databricks runtime uses it.
+
+**Public API.** From 1.0.0 the library follows [semantic versioning](https://semver.org): nothing
+below changes in a breaking way without a major version bump.
+
+- Everything exported from `pyspark_contracts` (its `__all__`), with the parameters, attributes,
+  and behavior documented for each.
+- The values of `ViolationKind` and `Severity`.
+- The structured fields of the log record — `contract`, `mode`, `depth`, `violations` (each with
+  `Violation`'s fields), `row_count` — and the dict returned by `ViolationReport.to_dict()`.
+- The keys of `Contract.to_dict()`, and the shape of `split()`'s errors column.
+
+**Not public API**, free to change in any release:
+
+- Anything under a leading underscore, including the `pyspark_contracts._*` modules.
+- The wording of log messages, `ViolationReport.summary()`, and exception messages. Match the
+  stable prefix with `like` (e.g. `contract violation — job aborted`), or use the structured
+  fields.
+- Which rows end up in `sample_values` and in what order (always up to five), and how many Spark
+  actions a validation runs.
+
+Until 1.0.0, minor releases may still break things; each break is called out in the CHANGELOG.
+

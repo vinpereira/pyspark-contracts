@@ -1,5 +1,6 @@
 import logging
 import os
+from collections.abc import Sequence
 
 from pyspark.sql import DataFrame
 
@@ -22,8 +23,9 @@ class _ValidationMixin:
     min_rows: int | None = None
     max_rows: int | None = None
     strict: bool = False
-    key: tuple[str, ...] = ()
-    unique_together: tuple[tuple[str, ...], ...] = ()
+    # Declared as lists in a contract (key = ["vin"]); the metaclass normalizes them to tuples
+    key: Sequence[str] = ()
+    unique_together: Sequence[Sequence[str]] = ()
 
     def _report_name(self) -> str:
         return type(self).__name__

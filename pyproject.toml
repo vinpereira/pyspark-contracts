@@ -42,7 +42,7 @@ path = "pyspark_contracts/__init__.py"
 packages = ["pyspark_contracts"]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "pyspark>=3.3", "ruff>=0.4"]
+dev = ["pytest>=8.0", "pyspark>=3.3", "ruff>=0.4", "mypy>=1.10"]
 
 [tool.ruff]
 line-length = 100

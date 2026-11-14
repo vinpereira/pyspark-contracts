@@ -9,7 +9,9 @@ After a trial run in a production pipeline, v1.0.0 commits to the public API —
 `Field`, `@check`, `@check_input`, `@check_output`, `ValidationDepth`, `ContractSchema`,
 `ViolationReport`, `Violation`, `SplitResult`, `ViolationKind`, `Severity`,
 `ContractViolationError`, and the JSON log format: no breaking changes without a major version
-bump.
+bump. What exactly is covered is in the README's
+[Compatibility and versioning](https://github.com/vinpereira/pyspark-contracts/blob/main/README.md#compatibility-and-versioning)
+section.
 
 ## Non-goals
 
