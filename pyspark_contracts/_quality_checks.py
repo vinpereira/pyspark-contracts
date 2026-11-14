@@ -1,8 +1,9 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from functools import reduce
-from operator import and_
+from operator import and_, or_
 
-from pyspark.sql import Column, DataFrame
+from pyspark.sql import Column, DataFrame, Window
 from pyspark.sql import functions as F
 
 from pyspark_contracts._report import Severity, Violation, ViolationKind
@@ -45,8 +46,26 @@ def _severity_for(
 # strips only the space character, so it would miss tabs, newlines, and non-breaking spaces.
 _BLANK = r"(?U)\A\s*\z"
 
-# Helper column of the duplicate count; named so it can't collide with a user's column
+# Helper columns, named so they can't collide with a user's column
 _DUPLICATE_COUNT = "__pyspark_contracts_duplicate_count"
+_SAMPLE_RULE = "__pyspark_contracts_sample_rule"
+_SAMPLE_RANK = "__pyspark_contracts_sample_rank"
+
+# Samples of the rules failing on at most this many rows are fetched together in one scan. A
+# rule failing more often keeps its own limit(5), which stops reading as soon as it has five
+# rows, while the batched query shuffles every failing row of every batched rule.
+_SAMPLE_BATCH_MAX_FAILURES = 10_000
+_SAMPLES = 5
+
+
+@dataclass(eq=False)  # holds a Column, whose == builds an expression instead of comparing
+class _PendingSample:
+    """A reported violation still waiting for its samples. ``column`` is the failing column
+    of a field rule; ``None`` means a check, sampled as whole rows."""
+
+    violation: Violation
+    fail: Column
+    column: str | None
 
 
 def _quote(col_name: str) -> str:
@@ -60,18 +79,6 @@ def _quote(col_name: str) -> str:
 
 
 class _QualityCheckMixin:
-    def _samples(self, df: DataFrame, col_name: str, condition) -> tuple[list, list | None]:
-        """Up to five failing values of ``col_name`` and, if the contract declares a ``key``,
-        the key columns of those same rows — from one query, so they line up."""
-        key = self.key
-        selected = [F.col(_quote(col_name)).alias("_value")]
-        selected += [F.col(_quote(k)).alias(f"_key{i}") for i, k in enumerate(key)]
-        rows = df.filter(condition).select(*selected).limit(5).collect()
-        values = [row["_value"] for row in rows]
-        if not key:
-            return values, None
-        return values, [{k: row[f"_key{i}"] for i, k in enumerate(key)} for row in rows]
-
     def _row_rules(self, skip_columns: set, blocks_cross_column: bool) -> list[_RowRule]:
         """Every row-level constraint of this contract, in evaluation order.
 
@@ -203,15 +210,17 @@ class _QualityCheckMixin:
         row_count: int,
         rules: list[_RowRule],
         fail_counts: list[int | None],
+        pending: list[_PendingSample],
         lazy: bool = True,
     ) -> list[Violation]:
+        """The violations of the field rules and ``unique_together`` groups. Samples of the
+        predicate-based ones are left to :meth:`_fill_samples`, via ``pending``."""
         violations: list[Violation] = []
 
         for rule, fail in zip(rules, fail_counts):
             if rule.kind is ViolationKind.DUPLICATE_VALUE:
                 violation = self._duplicate_violation(df, rule, row_count)
             elif fail:
-                values, keys = self._samples(df, rule.column, rule.fail)
                 violation = Violation(
                     kind=rule.kind,
                     severity=rule.severity_for(fail, row_count),
@@ -219,9 +228,8 @@ class _QualityCheckMixin:
                     constraint=rule.constraint,
                     row_pct=round(fail / row_count * 100, 1),
                     failure_count=fail,
-                    sample_values=values,
-                    sample_keys=keys,
                 )
+                pending.append(_PendingSample(violation, rule.fail, rule.column))
             else:
                 violation = None
 
@@ -231,6 +239,46 @@ class _QualityCheckMixin:
                     return violations
 
         return violations
+
+    def _fill_samples(self, df: DataFrame, pending: list[_PendingSample]) -> None:
+        """Fills in ``sample_values`` (and ``sample_keys``) of the reported violations.
+
+        Rules failing on at most ``_SAMPLE_BATCH_MAX_FAILURES`` rows share one query when there
+        are two or more of them; the rest each run their own ``limit(5)``.
+        """
+        batched = [p for p in pending if p.violation.failure_count <= _SAMPLE_BATCH_MAX_FAILURES]
+        if len(batched) < 2:
+            batched = []
+        for item in pending:
+            if item not in batched:
+                rows = df.filter(item.fail).limit(_SAMPLES).collect()
+                self._set_samples(item, rows, df.columns)
+        if batched:
+            self._fill_batched_samples(df, batched)
+
+    def _fill_batched_samples(self, df: DataFrame, batched: list[_PendingSample]) -> None:
+        # One row per (failing row, rule it breaks), then the first five per rule
+        flags = F.array(*[F.when(item.fail, F.lit(i)) for i, item in enumerate(batched)])
+        hits = df.filter(reduce(or_, [item.fail for item in batched])).withColumn(
+            _SAMPLE_RULE, F.explode(F.filter(flags, lambda flag: flag.isNotNull()))
+        )
+        ranking = Window.partitionBy(_SAMPLE_RULE).orderBy(F.lit(1))
+        sampled = hits.withColumn(_SAMPLE_RANK, F.row_number().over(ranking)).filter(
+            F.col(_SAMPLE_RANK) <= _SAMPLES
+        )
+        by_rule: dict[int, list] = defaultdict(list)
+        for row in sampled.collect():
+            by_rule[row[_SAMPLE_RULE]].append(row)
+        for i, item in enumerate(batched):
+            self._set_samples(item, by_rule[i], df.columns)
+
+    def _set_samples(self, item: _PendingSample, rows: list, columns: list[str]) -> None:
+        if item.column is None:
+            item.violation.sample_values = [{c: row[c] for c in columns} for row in rows]
+            return
+        item.violation.sample_values = [row[item.column] for row in rows]
+        if self.key:
+            item.violation.sample_keys = [{k: row[k] for k in self.key} for row in rows]
 
     def _duplicate_violation(
         self, df: DataFrame, rule: _RowRule, row_count: int

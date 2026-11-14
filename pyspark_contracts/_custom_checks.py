@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from pyspark.sql import Column, DataFrame
 
-from pyspark_contracts._quality_checks import _RowRule, _severity_for
+from pyspark_contracts._quality_checks import _PendingSample, _RowRule, _severity_for
 from pyspark_contracts._report import Severity, Violation, ViolationKind
 
 
@@ -70,34 +70,38 @@ class _CustomCheckMixin:
         row_count: int,
         checks: list[_ResolvedCheck],
         condition_counts: dict[str, int],
+        pending: list[_PendingSample],
         lazy: bool = True,
     ) -> list[Violation]:
+        """The violations of the ``@check`` methods. Samples of condition checks are left to
+        :meth:`_fill_samples`, via ``pending``; a DataFrame check fetches its own."""
         violations: list[Violation] = []
         for resolved in checks:
             method = resolved.method
             if resolved.rule is not None:
                 fail = condition_counts[resolved.name]
-                failing = df.filter(resolved.rule.fail)
             else:
-                failing = resolved.failing
-                fail = failing.count()
+                fail = resolved.failing.count()
             if not fail:
                 continue
 
             severity = _severity_for(
                 method._check_severity, method._check_max_failure_pct, fail, row_count
             )
-            violations.append(
-                Violation(
-                    kind=ViolationKind.CHECK_FAILED,
-                    severity=severity,
-                    check=resolved.name,
-                    constraint=method._check_description,
-                    row_pct=round(fail / row_count * 100, 1),
-                    failure_count=fail,
-                    sample_values=[row.asDict() for row in failing.limit(5).collect()],
-                )
+            violation = Violation(
+                kind=ViolationKind.CHECK_FAILED,
+                severity=severity,
+                check=resolved.name,
+                constraint=method._check_description,
+                row_pct=round(fail / row_count * 100, 1),
+                failure_count=fail,
             )
+            if resolved.rule is not None:
+                pending.append(_PendingSample(violation, resolved.rule.fail, None))
+            else:
+                rows = resolved.failing.limit(5).collect()
+                violation.sample_values = [row.asDict() for row in rows]
+            violations.append(violation)
             if not lazy and severity is Severity.ERROR:
                 return violations
 

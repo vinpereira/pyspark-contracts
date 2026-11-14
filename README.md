@@ -624,19 +624,22 @@ nulls = [v for v in report.violations if v.kind == ViolationKind.NULL_VIOLATION]
 
 ## Performance note
 
-The row count and every column constraint (`nullable`, ranges, lengths, `regex`,
-`allowed_values`, `condition`) are checked together in a single Spark action, however many
-the contract declares. On top of that:
+The row count, every column constraint (`nullable`, ranges, lengths, `regex`,
+`allowed_values`, `condition`), and every `@check` that returns a condition are checked
+together in a single Spark action, however many the contract declares. On top of that:
 
-| Adds one Spark action each | Why |
+| Adds one Spark action | Why |
 |---|---|
-| `unique` field | Needs a `groupBy`, which can't share the single pass |
-| `@check` method | Counts the rows it returns |
-| Violation found | Fetches its `sample_values` |
+| Each `unique` field or `unique_together` group | Needs a `groupBy`, which can't share the single pass |
+| Each `@check` that returns a DataFrame | Counts the rows it returns |
+| Any violations found | One query fetches the `sample_values` of the failing rules |
 
-So a contract without `unique` or `@check` reads a passing DataFrame once. If yours has
-several of them, or you expect violations, and the DataFrame is expensive to recompute,
-cache it before validating:
+The sample query covers every failing rule with up to 10,000 failing rows; a rule failing more
+often gets its own lookup, which stops reading as soon as it has five rows.
+
+So a contract without `unique`/`unique_together` or DataFrame checks reads a passing DataFrame
+once. If yours has several of them, or you expect violations, and the DataFrame is expensive to
+recompute, cache it before validating:
 
 ```python
 df = df.cache()

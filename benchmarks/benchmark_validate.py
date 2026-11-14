@@ -2,8 +2,9 @@
 
 Builds a synthetic DataFrame with ROW_COUNT rows and validates it against a Contract
 that exercises every constraint kind (nullable, min/max, length, regex, allowed_values,
-unique, condition, @check, min_rows), at each ValidationDepth, to show where the Spark
-actions actually go.
+unique, condition, a condition @check, min_rows), at each ValidationDepth, to show where
+the Spark actions actually go — plus a copy with a few bad rows, to show the cost of a
+failing validation.
 
 Run: uv run python benchmarks/benchmark_validate.py
 """
@@ -46,8 +47,7 @@ class OdometerReadingContract(Contract):
 
     @check("delta_km must not exceed a plausible daily max")
     def plausible_delta(self, df):
-        delta = F.col("odometer_end") - F.col("odometer_start")
-        return df.filter(delta > 2000)
+        return F.col("odometer_end") - F.col("odometer_start") > 2000
 
 
 def build_dataframe(spark, n):
@@ -74,6 +74,26 @@ def count_jobs(spark, fn):
     return len(spark.sparkContext.statusTracker().getJobIdsForGroup(group))
 
 
+def build_failing_dataframe(spark, n):
+    """The same data with a handful of bad rows (4 in 1M) that break 5 rules: vin length and
+    regex, status, odometer_start, and the delta check. The case where fetching sample values
+    one rule at a time is expensive: each lookup reads most of the data to find 4 rows."""
+    bad = F.col("asset_hdr_id") % (n // 4) == 0
+    df = build_dataframe(spark, n)
+    return df.select(
+        "asset_hdr_id",
+        F.when(bad, F.lit("BAD")).otherwise(F.col("vin")).alias("vin"),
+        F.when(bad, F.lit("unknown")).otherwise(F.col("status")).alias("status"),
+        F.when(bad, F.lit(-1).cast(DecimalType(18, 2)))
+        .otherwise(F.col("odometer_start"))
+        .alias("odometer_start"),
+        F.when(bad, F.lit(5000).cast(DecimalType(18, 2)))
+        .otherwise(F.col("odometer_end"))
+        .alias("odometer_end"),
+        "reading_date",
+    )
+
+
 def time_it(spark, label, fn):
     jobs = count_jobs(spark, fn)  # also the warmup: primes Catalyst whole-stage codegen
     times = []
@@ -98,6 +118,8 @@ def main():
 
     df = build_dataframe(spark, ROW_COUNT).cache()
     df.count()  # materialize the cache before timing anything
+    failing_df = build_failing_dataframe(spark, ROW_COUNT).cache()
+    failing_df.count()
 
     print(
         f"Rows: {ROW_COUNT:,}  |  Contract: {len(OdometerReadingContract._fields)} fields, "
@@ -124,6 +146,11 @@ def main():
         spark,
         "validate(depth=SCHEMA_AND_DATA, default)",
         lambda: OdometerReadingContract().validate(df, mode="soft"),
+    )
+    time_it(
+        spark,
+        "validate(), 5 rules failing on 4 rows",
+        lambda: OdometerReadingContract().validate(failing_df, mode="soft"),
     )
 
     spark.stop()

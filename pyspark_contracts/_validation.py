@@ -45,9 +45,11 @@ class _ValidationMixin:
         methods — each stage gated by ``depth`` and, in fail-fast mode, by whether an
         earlier stage already found a violation.
 
-        The row count and every per-field constraint except ``unique`` are computed in
-        a single Spark action. Each ``unique`` field and each ``@check`` adds one more,
-        and so does each violation found (to fetch its ``sample_values``).
+        The row count, every per-field constraint except ``unique``, and every ``@check``
+        that returns a condition are computed in a single Spark action. Each ``unique``
+        field, ``unique_together`` group, and DataFrame-returning ``@check`` adds one more.
+        Samples of the violations found come from one more query (a rule failing on over
+        10,000 rows gets its own lookup instead).
 
         Args:
             df: The DataFrame to validate.
@@ -124,10 +126,17 @@ class _ValidationMixin:
             }
             fail_counts = fail_counts[: len(rules)]
             violations += self._check_dataset(row_count, lazy=lazy)
+            # Samples of the predicate-based violations are fetched together at the end
+            pending: list = []
             if row_count > 0 and (lazy or not _has_errors(violations)):
-                violations += self._check_quality(df, row_count, rules, fail_counts, lazy=lazy)
+                violations += self._check_quality(
+                    df, row_count, rules, fail_counts, pending, lazy=lazy
+                )
             if row_count > 0 and not blocks_cross_column and (lazy or not _has_errors(violations)):
-                violations += self._check_custom(df, row_count, checks, condition_counts, lazy=lazy)
+                violations += self._check_custom(
+                    df, row_count, checks, condition_counts, pending, lazy=lazy
+                )
+            self._fill_samples(df, pending)
 
         report = ViolationReport(self._report_name(), violations, row_count, mode=mode, depth=depth)
 
