@@ -2,6 +2,38 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.1] - 2026-11-14
+
+Hardening before v1.0.0, plus a fix for window functions in conditions.
+
+### Fixed
+- **A window function in a condition no longer fails validation.** A `@check` returning a
+  condition like `F.count(F.lit(1)).over(Window.partitionBy("vin")) > 1`, or a
+  `Field(condition=...)` with one, made `validate()` raise `AnalysisException` ("not allowed to
+  use a window function inside an aggregate function"), since 0.10.0 for `Field(condition=...)`.
+  Predicates are now projected as columns before they're counted and filtered; for plain
+  predicates Spark's optimizer folds that back into the same plan, so cost is unchanged
+  (checked with an interleaved benchmark against 0.13.0). `split()` was not affected.
+- **`key` and `unique_together` type-check when written as the docs show.** They were annotated
+  as tuples, so `key = ["vin"]` failed mypy/pyright in a typed project (the package ships
+  `py.typed`). Now `Sequence[str]` and `Sequence[Sequence[str]]`. CI type-checks a contract
+  written the documented way.
+
+### Changed
+- **Breaking: `Violation` takes keyword arguments only.** `Violation(kind=..., column=...)` works
+  as before; positional construction (`Violation("null_violation", ...)`) now raises
+  `TypeError`. This is what lets future fields be added without breaking anyone — positional
+  construction already broke when `severity` (0.11.0) and `sample_keys` (0.12.0) were added.
+
+### Docs
+- New README section, **Compatibility and versioning**: supported Python and PySpark versions,
+  what counts as public API under semantic versioning from 1.0.0 (exports, `ViolationKind` and
+  `Severity` values, structured log fields, `to_dict()` keys, `split()`'s errors column), and what
+  doesn't (underscore names, message wording, sample selection, number of Spark actions).
+- How a DataFrame-returning `@check` counts failures: `failure_count` is the number of rows it
+  returns, so return input rows, not aggregates — or use a window condition for rules about
+  groups. The README example now does both.
+
 ## [0.13.0] - 2026-11-14
 
 Cheaper checks, and the last changes before v1.0.0. Existing contracts keep working; read

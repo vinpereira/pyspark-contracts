@@ -1,4 +1,4 @@
-__version__ = "0.13.0"
+__version__ = "0.13.1"
 
 from pyspark_contracts._check import check
 from pyspark_contracts._contract import Contract
