@@ -170,7 +170,10 @@ class _DocumentationMixin:
             lines.append("")
             lines.append("Checks:")
             for check_name, method in cls._checks.items():
-                severity = "" if method._check_severity is Severity.ERROR else " (warn)"
-                lines.append(f"  {check_name}{severity}: {method._check_description}")
+                tags = [] if method._check_severity is Severity.ERROR else ["warn"]
+                if method._check_max_failure_pct is not None:
+                    tags.append(f"max_failure_pct={method._check_max_failure_pct}")
+                suffix = f" ({', '.join(tags)})" if tags else ""
+                lines.append(f"  {check_name}{suffix}: {method._check_description}")
 
         return "\n".join(lines)

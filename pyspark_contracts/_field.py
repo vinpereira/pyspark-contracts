@@ -10,6 +10,13 @@ from pyspark_contracts._report import Severity
 _Comparable = int | float | Decimal | date | datetime
 
 
+def _check_failure_pct(value: float | None, caller: str) -> None:
+    if value is not None and not 0 <= value <= 100:
+        raise ValueError(
+            f"{caller} max_failure_pct must be a percentage between 0 and 100, got {value!r}"
+        )
+
+
 def _severity(value: str, caller: str) -> Severity:
     try:
         return Severity(value)
@@ -112,11 +119,7 @@ class Field:
         column: str | None = None,
         blank_is_null: bool = False,
     ) -> None:
-        if max_failure_pct is not None and not 0 <= max_failure_pct <= 100:
-            raise ValueError(
-                f"Field() max_failure_pct must be a percentage between 0 and 100, "
-                f"got {max_failure_pct!r}"
-            )
+        _check_failure_pct(max_failure_pct, "Field()")
         if column is not None and not column:
             raise ValueError("Field() column must not be empty")
         if blank_is_null:

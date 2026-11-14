@@ -56,7 +56,7 @@ Generated from the docstrings in `pyspark_contracts`.
 ## Violation
 
 ```{eval-rst}
-.. autoclass:: pyspark_contracts._report.Violation
+.. autoclass:: pyspark_contracts.Violation
    :members:
 ```
 

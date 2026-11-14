@@ -45,9 +45,11 @@ class _ValidationMixin:
         methods — each stage gated by ``depth`` and, in fail-fast mode, by whether an
         earlier stage already found a violation.
 
-        The row count and every per-field constraint except ``unique`` are computed in
-        a single Spark action. Each ``unique`` field and each ``@check`` adds one more,
-        and so does each violation found (to fetch its ``sample_values``).
+        The row count, every per-field constraint except ``unique``, and every ``@check``
+        that returns a condition are computed in a single Spark action. Each ``unique``
+        field, ``unique_together`` group, and DataFrame-returning ``@check`` adds one more.
+        Samples of the violations found come from one more query (a rule failing on over
+        10,000 rows gets its own lookup instead).
 
         Args:
             df: The DataFrame to validate.
@@ -67,7 +69,7 @@ class _ValidationMixin:
                 Defaults to this library's built-in logger (JSON to stdout).
             **kwargs: Forwarded to this contract's ``@check`` methods, routed by
                 parameter name — a kwarg matching no ``@check``'s signature raises
-                ``TypeError``.
+                ``TypeError`` whenever the data stage runs, even on an empty DataFrame.
 
         Returns:
             The :class:`.ViolationReport`. In ``mode="hard"``, only returned when
@@ -108,17 +110,33 @@ class _ValidationMixin:
         if depth in (ValidationDepth.DATA_ONLY, ValidationDepth.SCHEMA_AND_DATA) and (
             lazy or not _has_errors(violations)
         ):
+            routed = self._route_check_kwargs(kwargs, "validate()")
+            # Checks may reference any column, so a missing/mistyped one skips them all
+            checks = [] if blocks_cross_column else self._resolve_checks(df, routed)
+            condition_rules = [c.rule for c in checks if c.rule is not None]
             rules = self._row_rules(
                 skip_columns={v.column for v in violations},
                 blocks_cross_column=blocks_cross_column,
             )
-            # One Spark action for the row count and every row-level constraint at once
-            row_count, fail_counts = self._count_rows_and_failures(df, rules)
+            # One Spark action for the row count, every row-level constraint, and every
+            # condition check at once
+            row_count, fail_counts = self._count_rows_and_failures(df, rules + condition_rules)
+            condition_counts = {
+                rule.check: count for rule, count in zip(condition_rules, fail_counts[len(rules) :])
+            }
+            fail_counts = fail_counts[: len(rules)]
             violations += self._check_dataset(row_count, lazy=lazy)
+            # Samples of the predicate-based violations are fetched together at the end
+            pending: list = []
             if row_count > 0 and (lazy or not _has_errors(violations)):
-                violations += self._check_quality(df, row_count, rules, fail_counts, lazy=lazy)
+                violations += self._check_quality(
+                    df, row_count, rules, fail_counts, pending, lazy=lazy
+                )
             if row_count > 0 and not blocks_cross_column and (lazy or not _has_errors(violations)):
-                violations += self._check_custom(df, row_count, lazy=lazy, **kwargs)
+                violations += self._check_custom(
+                    df, row_count, checks, condition_counts, pending, lazy=lazy
+                )
+            self._fill_samples(df, pending)
 
         report = ViolationReport(self._report_name(), violations, row_count, mode=mode, depth=depth)
 

@@ -2,6 +2,43 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.0] - 2026-11-14
+
+Cheaper checks, and the last changes before v1.0.0. Existing contracts keep working; read
+**Changed** if you store `split()`'s `_violations` column or call Spark actions inside a
+`@check`.
+
+### Added
+- **`@check` methods can return a condition.** A check may return a `Column` selecting the
+  failing rows (what it would pass to `df.filter(...)`) instead of a DataFrame. It's evaluated in
+  the same single scan as the field constraints, so a passing check costs no extra Spark action,
+  and `split()` can reject rows with it. Checks that return a DataFrame (joins, windows,
+  aggregations) work as before. Anything else raises `TypeError`. The benchmark contract goes
+  from 6 Spark jobs to 4 on a passing validation.
+- **`split()` evaluates condition checks.** Error-severity condition checks reject rows like
+  field rules; DataFrame checks are still skipped, and the warning now names only those.
+  `split()` takes the checks' parameters as `**kwargs`, routed like `validate()`'s.
+- **`@check(..., max_failure_pct=...)`**, the same tolerance `Field` has, for both kinds of
+  check. Shown by `describe()`.
+- **`Violation` is exported** from `pyspark_contracts`.
+- CI tests Python 3.13 with PySpark 4.1, the AWS Glue 6.0 runtime.
+
+### Changed
+- **Sample values come from one query.** When several rules fail, their `sample_values` and
+  `sample_keys` are fetched together instead of one Spark action per rule; a rule failing on
+  more than 10,000 rows keeps its own lookup, which stops as soon as it has five rows. The
+  benchmark's failing case (5 rules on 4 rows of 1M) goes from 21 Spark jobs to 6, 0.62s to
+  0.44s. Samples are still "up to five, in any order", but may differ from before.
+- **`split()`'s `_violations` column gains a `check` field:** it's now
+  `array<struct<kind, column, check, constraint>>`. **A table storing it with a fixed schema
+  must accept the new nested field** (e.g. Iceberg with `mergeSchema`).
+- `@check` methods are called once per validation that reaches the data stage, before the
+  aggregation. A check that runs a Spark action inside its method now runs it even when fail-fast
+  would stop before reporting that check.
+- An unknown keyword argument to `validate()` raises `TypeError` whenever the data stage runs —
+  including on an empty DataFrame or after an earlier fail-fast error, where a typo used to go
+  unnoticed.
+
 ## [0.12.0] - 2026-11-04
 
 Row-level outcomes: what a job needs to act on bad rows, not just detect them. Everything is

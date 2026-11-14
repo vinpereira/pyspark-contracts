@@ -1,45 +1,108 @@
 import inspect
+from collections.abc import Callable
+from dataclasses import dataclass
 
-from pyspark.sql import DataFrame
+from pyspark.sql import Column, DataFrame
 
+from pyspark_contracts._quality_checks import _PendingSample, _RowRule, _severity_for
 from pyspark_contracts._report import Severity, Violation, ViolationKind
 
 
+@dataclass
+class _ResolvedCheck:
+    """A ``@check`` after calling its method: a condition (``rule``) or failing rows."""
+
+    name: str
+    method: Callable
+    rule: _RowRule | None = None
+    failing: DataFrame | None = None
+
+
 class _CustomCheckMixin:
-    def _check_custom(
-        self, df: DataFrame, row_count: int, lazy: bool = True, **kwargs
-    ) -> list[Violation]:
+    def _route_check_kwargs(self, kwargs: dict, caller: str) -> dict[str, dict]:
+        """Each ``@check``'s share of ``kwargs``, by parameter name. Raises ``TypeError`` for a
+        kwarg no check accepts, so a typo can't be silently ignored."""
         accepted: set[str] = set()
-        check_kwargs: dict[str, dict] = {}
+        routed: dict[str, dict] = {}
         for check_name, method in self._checks.items():
             params = [p for p in inspect.signature(method).parameters if p not in ("self", "df")]
             accepted.update(params)
-            check_kwargs[check_name] = {k: v for k, v in kwargs.items() if k in params}
+            routed[check_name] = {k: v for k, v in kwargs.items() if k in params}
 
         unknown = set(kwargs) - accepted
         if unknown:
             raise TypeError(
-                f"validate() got unexpected keyword argument(s) not accepted by any "
+                f"{caller} got unexpected keyword argument(s) not accepted by any "
                 f"@check: {sorted(unknown)}"
             )
+        return routed
 
-        violations: list[Violation] = []
+    def _resolve_checks(self, df: DataFrame, routed: dict[str, dict]) -> list[_ResolvedCheck]:
+        """Calls every ``@check`` method once and sorts the result: a ``Column`` becomes a
+        row rule (counted in the single aggregation, usable by ``split()``); a ``DataFrame``
+        is kept to be counted on its own."""
+        resolved: list[_ResolvedCheck] = []
         for check_name, method in self._checks.items():
-            failing_df = method(self, df, **check_kwargs[check_name])
-            fail = failing_df.count()
-            if fail:
-                violations.append(
-                    Violation(
-                        kind=ViolationKind.CHECK_FAILED,
-                        severity=method._check_severity,
-                        check=check_name,
-                        constraint=method._check_description,
-                        row_pct=round(fail / row_count * 100, 1),
-                        failure_count=fail,
-                        sample_values=[row.asDict() for row in failing_df.limit(5).collect()],
-                    )
+            result = method(self, df, **routed[check_name])
+            if isinstance(result, Column):
+                rule = _RowRule(
+                    kind=ViolationKind.CHECK_FAILED,
+                    column=None,
+                    constraint=method._check_description,
+                    fail=result,
+                    severity=method._check_severity,
+                    max_failure_pct=method._check_max_failure_pct,
+                    check=check_name,
                 )
-                if not lazy and violations[-1].severity is Severity.ERROR:
-                    return violations
+                resolved.append(_ResolvedCheck(check_name, method, rule=rule))
+            elif isinstance(result, DataFrame):
+                resolved.append(_ResolvedCheck(check_name, method, failing=result))
+            else:
+                raise TypeError(
+                    f"@check method '{check_name}' must return a Column condition selecting "
+                    f"the failing rows, or a DataFrame of them; got {type(result).__name__}"
+                )
+        return resolved
+
+    def _check_custom(
+        self,
+        df: DataFrame,
+        row_count: int,
+        checks: list[_ResolvedCheck],
+        condition_counts: dict[str, int],
+        pending: list[_PendingSample],
+        lazy: bool = True,
+    ) -> list[Violation]:
+        """The violations of the ``@check`` methods. Samples of condition checks are left to
+        :meth:`_fill_samples`, via ``pending``; a DataFrame check fetches its own."""
+        violations: list[Violation] = []
+        for resolved in checks:
+            method = resolved.method
+            if resolved.rule is not None:
+                fail = condition_counts[resolved.name]
+            else:
+                fail = resolved.failing.count()
+            if not fail:
+                continue
+
+            severity = _severity_for(
+                method._check_severity, method._check_max_failure_pct, fail, row_count
+            )
+            violation = Violation(
+                kind=ViolationKind.CHECK_FAILED,
+                severity=severity,
+                check=resolved.name,
+                constraint=method._check_description,
+                row_pct=round(fail / row_count * 100, 1),
+                failure_count=fail,
+            )
+            if resolved.rule is not None:
+                pending.append(_PendingSample(violation, resolved.rule.fail, None))
+            else:
+                rows = resolved.failing.limit(5).collect()
+                violation.sample_values = [row.asDict() for row in rows]
+            violations.append(violation)
+            if not lazy and severity is Severity.ERROR:
+                return violations
 
         return violations

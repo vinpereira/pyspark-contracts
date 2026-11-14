@@ -3,33 +3,13 @@
 What's planned for pyspark-contracts, and what's deliberately out of scope. Plans can change;
 once something ships it moves from here to the [CHANGELOG](https://github.com/vinpereira/pyspark-contracts/blob/main/CHANGELOG.md).
 
-## Next: v0.13.0 — Cheaper checks
+## Next: v1.0.0 — Stable API
 
-Cut the Spark actions that are left after v0.10.0's single-pass validation.
-
-- **`@check` can return a condition.** Most checks are a `df.filter(...)`. Such a check can
-  return just the `Column` condition that selects the failing rows, and it's then evaluated
-  in the same single scan as the column constraints — no extra Spark action, even when the
-  contract passes. Checks that need joins, windows, or aggregations keep returning a
-  DataFrame, exactly as today.
-
-  ```python
-  @check("delta_km must be non-negative")
-  def no_regression(self, df):
-      return F.col("delta_km") < 0          # instead of df.filter(F.col("delta_km") < 0)
-  ```
-
-- **Sample values in one scan.** When several constraints fail, their `sample_values` are
-  fetched in a single pass over the data instead of one Spark action per failing
-  constraint. Matters most for rare failures on large, uncached DataFrames, where each of
-  those actions reads almost the whole input to find a handful of rows.
-
-## v1.0.0 — Stable API
-
-After v0.13.0, v1.0.0 commits to the public API — `Contract`, `Field`, `@check`,
-`@check_input`, `@check_output`, `ValidationDepth`, `ContractSchema`, `ViolationReport`,
-`ViolationKind`, `Severity`, `ContractViolationError`, and the JSON log format: no breaking
-changes without a major version bump.
+After a trial run in a production pipeline, v1.0.0 commits to the public API — `Contract`,
+`Field`, `@check`, `@check_input`, `@check_output`, `ValidationDepth`, `ContractSchema`,
+`ViolationReport`, `Violation`, `SplitResult`, `ViolationKind`, `Severity`,
+`ContractViolationError`, and the JSON log format: no breaking changes without a major version
+bump.
 
 ## Non-goals
 
